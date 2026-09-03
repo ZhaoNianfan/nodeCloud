@@ -48,6 +48,7 @@ noteCloud/
 │   ├── setup-caddy.sh       # 安装 Caddy（HTTPS）
 │   ├── notecloud.service    # systemd 服务单元
 │   └── Caddyfile            # 反向代理示例
+├── UPGRADE.md               # ★ 从旧版本升级（笔记零丢失）指南
 ├── test/                    # 测试脚本（可选）
 ├── data/                    # 运行时生成：users.json、secret.key、tmp（勿提交）
 └── notes/                   # 笔记根目录（勿提交）
@@ -114,6 +115,11 @@ systemctl status notecloud     # 状态
 systemctl restart notecloud    # 重启
 journalctl -u notecloud -f     # 实时日志
 ```
+
+### 从旧版本升级（服务器上已存有笔记时）
+
+**笔记零丢失升级**请务必阅读 [UPGRADE.md](./UPGRADE.md)：
+核心是「只替换代码、绝不删 `data/` 与 `notes/`」，升级前先备份，旧账号自动成为管理员。
 
 ---
 
