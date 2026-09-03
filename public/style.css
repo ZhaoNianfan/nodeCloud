@@ -419,7 +419,9 @@ button {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  /* 注意：不能设 overflow:hidden，否则它会成为 sticky 的最近滚动容器，
+     导致 .preview-bar 的吸顶失效（操作栏会跟着正文一起滚走） */
+  overflow: visible;
 }
 
 .preview-bar {
