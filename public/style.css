@@ -430,10 +430,9 @@ button {
   gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
   background: var(--panel);
+  /* 桌面宽屏：操作栏在文档流中随卡片滚动（v4 行为，不悬浮、不遮文）；
+     吸顶与 下滑收起/上滑唤出 仅在窄屏阅读模式启用（见下方媒体查询） */
 }
 
 .preview-title {
@@ -797,8 +796,13 @@ button {
 
   .file-row { gap: 8px; padding: 12px 10px; }
 
-  /* 阅读模式（移动端）：内容区顶到屏幕顶部、卡片全宽，
-     操作栏（返回/文件名/原文/下载）吸顶并支持 下滑收起/上滑唤出 */
+  /* 窄屏阅读模式：
+     - 隐藏顶部工具栏（上传文件/上传文件夹/新建/下载ZIP）
+     - 内容区顶到屏幕顶部、卡片全宽
+     - 操作栏（返回/文件名/原文/下载）吸顶固定，
+       向下滑动自动收起、向上滑动唤出（bar-hidden） */
+  body.previewing .topbar { display: none; }
+
   body.previewing #content { padding: 0; }
 
   body.previewing .preview {
@@ -811,6 +815,7 @@ button {
   body.previewing .preview-bar {
     position: sticky;
     top: 0;
+    z-index: 10;
     box-shadow: 0 1px 4px rgba(20, 30, 50, 0.06);
     transition: transform 0.25s ease;
   }
@@ -819,7 +824,3 @@ button {
     transform: translateY(-100%);
   }
 }
-
-/* 阅读模式（所有设备）：隐藏顶部工具栏（上传文件/上传文件夹/新建/下载ZIP），
-   避免出现"双页眉" */
-body.previewing .topbar { display: none; }
