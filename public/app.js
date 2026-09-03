@@ -360,6 +360,7 @@ function navigateFromHash() {
   $('#preview').hidden = true;
   $('#filelist').hidden = false;
   document.body.classList.remove('previewing'); // 离开阅读模式
+  resetReadBar();
   closeDrawer();
 }
 
@@ -550,6 +551,7 @@ async function openPreview(rel) {
   const body = $('#noteBody');
   body.innerHTML = '<p class="loading">加载中…</p>';
   document.body.classList.add('previewing'); // 阅读模式（手机端隐藏页眉、操作栏吸顶）
+  resetReadBar();
   try {
     const text = await apiText('/api/file?path=' + encodeURIComponent(rel));
     // 先修复含空格（等）的图片/链接目标，再交给 marked 解析
@@ -575,6 +577,7 @@ async function openPreview(rel) {
     });
 
     // 相对链接：.md → 站内跳转；其他相对文件 → 下载/查看；外链 → 新窗口
+    // 相对链接：.md → 站内跳转；其他相对文件 → 下载/查看；外链 → 新窗口
     $$('a', holder).forEach((a) => {
       const href = a.getAttribute('href') || '';
       if (!href || href.startsWith('/')) return;
@@ -584,7 +587,11 @@ async function openPreview(rel) {
         return;
       }
       if (/^(data:|#)/i.test(href)) return;
-      const resolved = resolveRel(noteDir, decodeMaybe(href));
+      let raw = decodeMaybe(href);
+      // 去掉 #锚点 片段后判断/解析（站内暂时不支持标题锚点定位）
+      const fragIdx = raw.indexOf('#');
+      if (fragIdx >= 0) raw = raw.slice(0, fragIdx);
+      const resolved = resolveRel(noteDir, raw);
       if (/\.(md|markdown)$/i.test(resolved)) {
         a.href = '#view/' + encodeURIComponent(resolved);
         a.classList.add('internal');
@@ -832,6 +839,28 @@ function closeDrawer() {
   $('#mask').hidden = true;
 }
 
+/* ===== 阅读时操作栏智能显隐：下滑收起、上滑唤出 ===== */
+let lastReadY = 0;
+
+function onReadScroll() {
+  const scroller = $('#content');
+  if (!scroller || !document.body.classList.contains('previewing')) return;
+  const y = scroller.scrollTop;
+  if (y <= 56) {
+    document.body.classList.remove('bar-hidden'); // 接近顶部时始终显示
+  } else if (y > lastReadY + 4) {
+    document.body.classList.add('bar-hidden'); // 向下滑 → 收起
+  } else if (y < lastReadY - 4) {
+    document.body.classList.remove('bar-hidden'); // 向上滑 → 唤出
+  }
+  lastReadY = y;
+}
+
+function resetReadBar() {
+  lastReadY = 0;
+  document.body.classList.remove('bar-hidden');
+}
+
 /* ================= 事件绑定与启动 ================= */
 document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('hashchange', navigateFromHash);
@@ -866,10 +895,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (state.view) window.location = '/api/file?path=' + encodeURIComponent(state.view) + '&download=1';
   };
 
-  // 笔记内相对链接跳转
+  // 笔记内相对链接跳转（.md → 站内打开另一篇笔记）
   $('#noteBody').addEventListener('click', (e) => {
     const a = e.target.closest('a.internal');
-    if (a) e.preventDefault(); // hash 变更由浏览器触发 hashchange
+    if (!a) return;
+    e.preventDefault();
+    const href = a.getAttribute('href') || '';
+    if (href.startsWith('#view/')) go(href); // 显式跳转，保证各浏览器行为一致
   });
 
   // 用户管理
@@ -895,6 +927,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('resize', () => {
     state.mobile = window.innerWidth < 900;
   });
+
+  // 阅读滚动：下滑收起操作栏，上滑唤出
+  $('#content').addEventListener('scroll', onReadScroll, { passive: true });
 
   // 拖拽上传（含文件夹：浏览器会给条目附带 webkitRelativePath）
   let dragDepth = 0;

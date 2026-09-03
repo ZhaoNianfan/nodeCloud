@@ -796,7 +796,8 @@ button {
   .file-row { gap: 8px; padding: 12px 10px; }
 
   /* 阅读模式：隐藏页眉（上传等按钮所在处），内容区顶到屏幕顶部，
-     操作栏（返回/文件名/原文/下载）吸顶固定在页面头部 */
+     操作栏（返回/文件名/原文/下载）吸顶固定在页面头部；
+     向下滑动自动收起、向上滑动唤出，随时可返回 */
   body.previewing .topbar { display: none; }
 
   body.previewing #content { padding: 0; }
@@ -812,5 +813,10 @@ button {
     position: sticky;
     top: 0;
     box-shadow: 0 1px 4px rgba(20, 30, 50, 0.06);
+    transition: transform 0.25s ease;
+  }
+
+  body.previewing.bar-hidden .preview-bar {
+    transform: translateY(-100%);
   }
 }

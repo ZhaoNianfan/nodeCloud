@@ -141,6 +141,55 @@ function assert(cond, msg) {
     );
   }
 
+  // === 场景 1.5：笔记内相对链接跳转 + 阅读栏滚动显隐 ===
+  const srcNote = '# 链接源\n\n[跳到目标笔记](./链接目标.md)';
+  const tgtNote = '# 链接目标笔记\n\n内容很长的目标\n'.repeat(3);
+  const srcFile = new window.File([srcNote], '链接源.md', { type: 'text/markdown' });
+  const tgtFile = new window.File([tgtNote], '链接目标.md', { type: 'text/markdown' });
+  uploadViaUI([srcFile, tgtFile]);
+  await sleep(3000);
+
+  window.location.hash = '#dir/';
+  await sleep(600);
+  const srcRow = Array.from(document.querySelectorAll('.file-row')).find((r) =>
+    r.textContent.includes('链接源.md')
+  );
+  assert(!!srcRow, '链接源笔记已上传');
+  srcRow.click();
+  await sleep(1500);
+  assert(document.getElementById('previewTitle').textContent === '链接源.md', '已打开链接源笔记');
+
+  const internalLink = document.querySelector('#noteBody a.internal');
+  assert(!!internalLink, '目标链接被识别为站内链接 (internal)');
+  if (internalLink) {
+    internalLink.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await sleep(1500);
+    assert(
+      document.getElementById('previewTitle').textContent === '链接目标.md',
+      '点击相对链接跳转到目标笔记'
+    );
+    assert(
+      document.getElementById('noteBody').textContent.includes('链接目标笔记'),
+      '目标笔记内容已渲染'
+    );
+  }
+
+  // 阅读栏滚动显隐（模拟向下/向上滑动）
+  const scroller = document.getElementById('content');
+  const scrollStub = (val) =>
+    Object.defineProperty(scroller, 'scrollTop', { value: val, configurable: true, writable: true });
+  scrollStub(400);
+  scroller.dispatchEvent(new window.Event('scroll'));
+  await sleep(80);
+  assert(document.body.classList.contains('bar-hidden'), '向下滑动后操作栏收起 (bar-hidden)');
+  scrollStub(120);
+  scroller.dispatchEvent(new window.Event('scroll'));
+  await sleep(80);
+  assert(!document.body.classList.contains('bar-hidden'), '向上滑动后操作栏唤出');
+
+  window.location.hash = '#dir/';
+  await sleep(600);
+
   // === 场景 2：路径含空格/中文（.image 目录） + ==高亮== ===
   const spacedImgDir = 'images/个人笔记-0901 - 副本.image';
   const spacedNote = [
