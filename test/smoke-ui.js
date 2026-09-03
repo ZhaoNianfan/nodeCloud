@@ -241,6 +241,88 @@ function assert(cond, msg) {
   await sleep(1000);
   assert(!document.getElementById('login').hidden, '登出后回到登录页');
 
+  // === 场景 5：角色与界面 ===
+  // 重新以管理员登录
+  async function doLogin(u, p) {
+    document.getElementById('inUser').value = u;
+    document.getElementById('inPass').value = p;
+    document
+      .getElementById('loginForm')
+      .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await sleep(1200);
+    syncJar();
+  }
+  await doLogin('admin', 'passw0rd123');
+  assert(!document.getElementById('app').hidden, '管理员重新登录成功');
+  window.location.hash = '#dir/'; // 回到根目录列表，确保列表按当前角色重新渲染
+  await sleep(800);
+
+  // 管理员可见用户管理入口与写操作按钮
+  assert(!document.getElementById('btnUsers').hidden, '管理员可见「用户管理」');
+  assert(!document.getElementById('btnUpload').hidden, '管理员可见上传按钮');
+  assert(document.getElementById('userRole').textContent === '管理员', '角色徽标=管理员');
+
+  // 打开用户管理，创建游客账号
+  document.getElementById('btnUsers').click();
+  await sleep(800);
+  assert(!document.getElementById('usersModal').hidden, '用户管理弹窗已打开');
+  document.getElementById('nuUser').value = 'guest01';
+  document.getElementById('nuPass').value = 'guestpass123';
+  document.getElementById('nuCreate').click();
+  await sleep(1200);
+  assert(
+    document.getElementById('usersList').textContent.includes('guest01'),
+    '用户列表出现新建的游客账号'
+  );
+  document.getElementById('nuClose').click();
+  await sleep(300);
+
+  // 电脑端侧栏收起/展开（桌面宽度）
+  assert(!document.body.classList.contains('sidebar-collapsed'), '初始侧栏展开');
+  document.getElementById('btnMenu').click();
+  assert(document.body.classList.contains('sidebar-collapsed'), '点击 ☰ 收起侧栏');
+  document.getElementById('btnMenu').click();
+  assert(!document.body.classList.contains('sidebar-collapsed'), '再次点击展开侧栏');
+
+  // 登出并用游客登录
+  document.getElementById('btnLogout').click();
+  await sleep(800);
+  await doLogin('guest01', 'guestpass123');
+  assert(document.getElementById('userName').textContent === 'guest01', '游客登录成功');
+  assert(document.getElementById('userRole').textContent === '游客', '角色徽标=游客');
+  assert(document.getElementById('btnUsers').hidden, '游客看不到用户管理');
+  assert(document.getElementById('btnUpload').hidden, '游客看不到上传文件');
+  assert(document.getElementById('btnUploadDir').hidden, '游客看不到上传文件夹');
+  assert(document.getElementById('btnNewDir').hidden, '游客看不到新建文件夹');
+  assert(document.getElementById('btnZip').hidden, '游客看不到下载ZIP');
+  assert(!document.getElementById('btnLogout').hidden, '游客仍可退出');
+
+  // 游客文件列表无下载/删除按钮
+  const guestList = document.getElementById('filelist').innerHTML;
+  assert(!guestList.includes('>删除<') && !guestList.includes('>下载<'), '游客列表无下载/删除按钮');
+
+  // 游客可在线查看笔记（打开根目录的 md）
+  const guestRows = Array.from(document.querySelectorAll('.file-row'));
+  const guestMd = guestRows.find((r) => r.textContent.includes('冒烟测试.md'));
+  assert(!!guestMd, '游客能看到笔记文件行');
+  guestMd.click();
+  await sleep(1500);
+  assert(document.body.classList.contains('previewing'), '阅读笔记时进入 previewing 阅读模式');
+  assert(
+    document.getElementById('noteBody').textContent.includes('冒烟测试笔记'),
+    '游客能在线查看笔记内容'
+  );
+
+  // 返回列表后退出阅读模式
+  window.location.hash = '#dir/';
+  await sleep(800);
+  assert(!document.body.classList.contains('previewing'), '返回列表后退出阅读模式');
+
+  // 登出
+  document.getElementById('btnLogout').click();
+  await sleep(800);
+  assert(!document.getElementById('login').hidden, '游客登出');
+
   console.log('\n页面 JS 错误数:', pageErrors.length);
   pageErrors.forEach((e) => console.log('  ', e));
   assert(pageErrors.length === 0, '无页面 JS 运行时错误');

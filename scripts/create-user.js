@@ -47,9 +47,11 @@ function askHidden(question) {
   const args = process.argv.slice(2);
   const username = args.find((a) => !a.startsWith('-'));
   const force = args.includes('--force');
+  const guest = args.includes('--guest') || args.includes('-g');
   if (!username) {
-    console.log('用法: node scripts/create-user.js <用户名> [--force]');
+    console.log('用法: node scripts/create-user.js <用户名> [选项]');
     console.log('  --force   重置已有用户的密码');
+    console.log('  --guest   创建游客账号（仅可在线查看；默认创建管理员账号）');
     process.exit(1);
   }
   fs.mkdirSync(config.dataDir, { recursive: true });
@@ -68,6 +70,7 @@ function askHidden(question) {
     process.exit(1);
   }
 
+  const role = guest ? 'guest' : 'admin';
   const exists = !!store.find(username);
   if (exists && !force) {
     console.error('用户已存在（如需重置密码请加 --force）');
@@ -75,10 +78,10 @@ function askHidden(question) {
   }
   if (exists) {
     await store.setPassword(username, p1);
-    console.log(`已重置用户 ${username} 的密码`);
+    console.log(`已重置用户 ${username}（${role === 'guest' ? '游客' : '管理员'}）的密码`);
   } else {
-    await store.create(username, p1);
-    console.log(`已创建用户 ${username}`);
+    await store.create(username, p1, role);
+    console.log(`已创建${role === 'guest' ? '游客' : '管理员'}账号 ${username}`);
   }
 })().catch((e) => {
   console.error(e.message);

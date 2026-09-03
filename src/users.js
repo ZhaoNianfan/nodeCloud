@@ -16,7 +16,9 @@ class UserStore {
   _load() {
     try {
       const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      return Array.isArray(data) ? data : [];
+      const list = Array.isArray(data) ? data : [];
+      // 兼容旧数据：无 role 字段的一律视为管理员（正式账号）
+      return list.map((u) => ({ ...u, role: u.role === 'guest' ? 'guest' : 'admin' }));
     } catch (e) {
       return [];
     }
@@ -38,12 +40,18 @@ class UserStore {
     return this.users.length;
   }
 
+  /** 脱敏的用户列表（不含密码哈希） */
+  all() {
+    return this.users.map((u) => ({ username: u.username, role: u.role, createdAt: u.createdAt }));
+  }
+
   find(username) {
     const key = String(username || '').toLowerCase();
     return this.users.find((u) => u.username.toLowerCase() === key) || null;
   }
 
-  async create(username, password) {
+  /** role: 'admin'（正式账号）或 'guest'（游客，仅可查看） */
+  async create(username, password, role) {
     if (this.find(username)) {
       const err = new Error('用户名已存在');
       err.status = 409;
@@ -53,10 +61,25 @@ class UserStore {
     this.users.push({
       username,
       hash,
+      role: role === 'guest' ? 'guest' : 'admin',
       createdAt: new Date().toISOString(),
     });
     this._save();
-    return { username };
+    return { username, role };
+  }
+
+  /** 删除用户（游客）；返回被删除的用户信息，不存在则抛 404 */
+  remove(username) {
+    const key = String(username || '').toLowerCase();
+    const idx = this.users.findIndex((u) => u.username.toLowerCase() === key);
+    if (idx === -1) {
+      const err = new Error('用户不存在');
+      err.status = 404;
+      throw err;
+    }
+    const [removed] = this.users.splice(idx, 1);
+    this._save();
+    return { username: removed.username, role: removed.role };
   }
 
   async setPassword(username, password) {

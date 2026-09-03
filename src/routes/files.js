@@ -8,9 +8,13 @@ const multer = require('multer');
 const archiver = require('archiver');
 
 const config = require('../config');
+const auth = require('../auth');
 const { resolveInside, assertRealInside, sanitizeName, normalizeRel } = require('../paths');
 
 const router = express.Router();
+
+// 写操作（上传/建目录/删除/打包下载）仅管理员可用；游客只允许在线查看
+const adminOnly = auth.requireRole('admin');
 
 // ---------- 上传：先落到临时目录，路由内再做冲突处理与最终落位 ----------
 const storage = multer.diskStorage({
@@ -75,7 +79,7 @@ router.get('/tree', async (req, res, next) => {
 
 // ---------- 上传 ----------
 // 请求：multipart，字段 path=目标相对路径(含文件名)，overwrite=1|0，file=文件
-router.post('/upload', upload.array('file', 500), async (req, res, next) => {
+router.post('/upload', adminOnly, upload.array('file', 500), async (req, res, next) => {
   const files = req.files || [];
   if (files.length === 0) {
     return res.status(400).json({ error: '未收到文件' });
@@ -138,7 +142,7 @@ router.post('/upload', upload.array('file', 500), async (req, res, next) => {
 });
 
 // ---------- 新建文件夹 ----------
-router.post('/dir', async (req, res, next) => {
+router.post('/dir', adminOnly, async (req, res, next) => {
   try {
     const p = (req.body && req.body.path) || '';
     const { full } = resolveInside(config.notesRoot, p);
@@ -154,8 +158,12 @@ router.post('/dir', async (req, res, next) => {
 });
 
 // ---------- 读取文件（在线预览 / 图片 / 下载） ----------
+// 游客可在线查看（内联读取），但 download=1 需管理员权限
 router.get('/file', (req, res, next) => {
   try {
+    if (req.query.download === '1' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: '游客账号仅可在线查看，不能下载文件' });
+    }
     const { full } = resolveInside(config.notesRoot, req.query.path);
     assertRealInside(config.notesRoot, full);
     if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
@@ -177,7 +185,7 @@ router.get('/file', (req, res, next) => {
 });
 
 // ---------- 打包下载（文件夹 ZIP / 单文件） ----------
-router.get('/zip', (req, res, next) => {
+router.get('/zip', adminOnly, (req, res, next) => {
   try {
     const { full } = resolveInside(config.notesRoot, req.query.path);
     assertRealInside(config.notesRoot, full);
@@ -209,7 +217,7 @@ router.get('/zip', (req, res, next) => {
 });
 
 // ---------- 删除（文件或文件夹） ----------
-router.delete('/file', async (req, res, next) => {
+router.delete('/file', adminOnly, async (req, res, next) => {
   try {
     const { full } = resolveInside(config.notesRoot, req.query.path);
     if (full === path.resolve(config.notesRoot)) {

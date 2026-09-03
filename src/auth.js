@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const config = require('./config');
+const state = require('./state');
 
 let _secret = null;
 
@@ -78,14 +79,29 @@ function clearAuthCookie(req, res) {
   });
 }
 
-/** 登录鉴权中间件 */
+/** 登录鉴权中间件：校验签名后从用户存储取最新信息（含角色），
+ *  账号被删除时立即失效。 */
 function requireAuth(req, res, next) {
   const payload = verify(req.cookies[config.cookieName]);
   if (!payload || !payload.sub) {
     return res.status(401).json({ error: '未登录或登录已过期' });
   }
-  req.user = { username: payload.sub };
+  const user = state.users ? state.users.find(payload.sub) : null;
+  if (!user) {
+    return res.status(401).json({ error: '账号不存在或已被删除' });
+  }
+  req.user = { username: user.username, role: user.role === 'guest' ? 'guest' : 'admin' };
   next();
+}
+
+/** 角色限制：requireRole('admin') / requireRole('admin', 'guest') */
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: '游客账号仅可在线查看，此操作需要管理员权限' });
+    }
+    next();
+  };
 }
 
 // ---- 登录限流：同一 IP 15 分钟内最多 5 次失败 ----
@@ -113,6 +129,7 @@ module.exports = {
   verify,
   issueToken,
   requireAuth,
+  requireRole,
   loginLimiter,
   setAuthCookie,
   clearAuthCookie,

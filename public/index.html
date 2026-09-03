@@ -7,7 +7,7 @@
 <title>NoteCloud · 笔记云</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
 <link rel="stylesheet" href="vendor/highlight-github.css">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -19,9 +19,13 @@
     </div>
     <div id="tree" class="tree"></div>
     <div class="side-foot">
-      <label class="opt"><input type="checkbox" id="optOverwrite" checked> 上传时覆盖同名文件</label>
+      <label class="opt" id="optRow"><input type="checkbox" id="optOverwrite" checked> 上传时覆盖同名文件</label>
       <div class="user-row">
         <span id="userName" class="user-name"></span>
+        <span id="userRole" class="role-chip" hidden></span>
+      </div>
+      <div class="user-row">
+        <button id="btnUsers" class="btn tiny ghost">用户管理</button>
         <button id="btnLogout" class="btn tiny ghost">退出</button>
       </div>
     </div>
@@ -30,7 +34,7 @@
 
   <main id="main">
     <div class="topbar">
-      <button id="btnMenu" class="icon-btn menu-btn" title="菜单">☰</button>
+      <button id="btnMenu" class="icon-btn" title="收起/展开导航">☰</button>
       <div id="breadcrumb" class="breadcrumb"></div>
       <div class="actions">
         <button id="btnUpload" class="btn">上传文件</button>
@@ -92,11 +96,27 @@
   </div>
 </div>
 
+<div id="usersModal" class="modal" hidden>
+  <div class="modal-card users-card">
+    <h3>👥 用户管理</h3>
+    <p class="hint-text">正式账号（管理员）可创建游客账号；游客仅可在线查看，不能上传/下载/删除。</p>
+    <div id="usersList" class="users-list"></div>
+    <div class="users-create">
+      <input id="nuUser" placeholder="游客用户名" maxlength="32">
+      <input id="nuPass" type="password" placeholder="密码（至少 8 位）">
+      <button id="nuCreate" class="btn tiny">创建</button>
+    </div>
+    <div class="modal-btns">
+      <button id="nuClose" class="btn ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
 <noscript><p style="padding:40px;text-align:center">需要启用 JavaScript 才能使用 NoteCloud</p></noscript>
 
 <script src="vendor/marked.min.js"></script>
 <script src="vendor/purify.min.js"></script>
 <script src="vendor/highlight.common.js"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

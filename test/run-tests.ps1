@@ -123,7 +123,59 @@ $code = curl.exe -s -o NUL -w "%{http_code}" "$base/api/zip?path=2024"
 Status '未登录 ZIP -> 401' 401 $code
 
 Write-Output ''
-Write-Output '=== 8. 安全：跨站与限流 ==='
+Write-Output '=== 8. 角色权限（游客） ==='
+
+# 管理员创建游客账号
+$bodyGuest = '{"username":"guest01","password":"guestpass123"}'
+[IO.File]::WriteAllText((Join-Path $tmp 'body-guest.json'), $bodyGuest, [Text.UTF8Encoding]::new($false))
+$r = curl.exe -s -b $cj -H "Content-Type: application/json" -d "@$tmp/body-guest.json" "$base/api/auth/users"
+$guestRole = ($r | ConvertFrom-Json).user.role
+Status '管理员创建游客账号 (role=guest)' 'guest' $guestRole
+
+# 未登录访问用户管理
+$code = curl.exe -s -o NUL -w "%{http_code}" "$base/api/auth/users"
+Status '未登录访问用户管理 -> 401' 401 $code
+
+# 游客登录（独立 cookie）
+$cjg = Join-Path $tmp 'cookies-guest.txt'
+Remove-Item $cjg -ErrorAction SilentlyContinue
+$code = curl.exe -s -o NUL -w "%{http_code}" -c $cjg -H "Content-Type: application/json" -d "@$tmp/body-guest.json" "$base/api/auth/login"
+Status '游客登录 -> 200' 200 $code
+$r = curl.exe -s -b $cjg "$base/api/auth/me"
+Status 'me 返回游客角色' 'guest' (($r | ConvertFrom-Json).user.role)
+
+# 已登录游客访问用户管理仍被拒绝
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/auth/users"
+Status '游客访问用户管理 -> 403' 403 $code
+
+# 游客可看目录树与在线读取
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/tree"
+Status '游客查看目录树 -> 200' 200 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/file?path=2024/note1.md"
+Status '游客在线读取笔记 -> 200' 200 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/file?path=2024/assets/pic.png"
+Status '游客在线查看图片 -> 200' 200 $code
+
+# 游客禁止：上传/下载/打包/建目录/删除
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg -F "path=g.md" -F "overwrite=1" -F "file=@$tmp/2024/note1.md" "$base/api/upload"
+Status '游客上传 -> 403' 403 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/file?path=2024/note1.md&download=1"
+Status '游客下载文件 -> 403' 403 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/zip?path=2024"
+Status '游客打包下载 -> 403' 403 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg -H "Content-Type: application/json" -d "@$tmp/body-dir.json" "$base/api/dir"
+Status '游客新建文件夹 -> 403' 403 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg -X DELETE "$base/api/file?path=2024/note1.md"
+Status '游客删除 -> 403' 403 $code
+
+# 管理员删除游客后其会话立即失效
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cj -X DELETE "$base/api/auth/users/guest01"
+Status '管理员删除游客 -> 200' 200 $code
+$code = curl.exe -s -o NUL -w "%{http_code}" -b $cjg "$base/api/tree"
+Status '被删游客会话立即失效 -> 401' 401 $code
+
+Write-Output ''
+Write-Output '=== 9. 安全：跨站与限流 ==='
 
 $code = curl.exe -s -o NUL -w "%{http_code}" -H "Origin: http://evil.example.com" -H "Content-Type: application/json" -d "@$tmp/body-dir.json" "$base/api/dir"
 Status '跨站 Origin -> 403' 403 $code
@@ -137,7 +189,7 @@ for ($i = 0; $i -lt 6; $i++) {
 Status '连续错误登录 -> 限流 429' 429 $last
 
 Write-Output ''
-Write-Output '=== 9. 登出 ==='
+Write-Output '=== 10. 登出 ==='
 
 $code = curl.exe -s -o NUL -w "%{http_code}" -b $cj -c $cj -X POST "$base/api/auth/logout"
 Status '登出 -> 200' 200 $code
@@ -145,7 +197,7 @@ $code = curl.exe -s -o NUL -w "%{http_code}" -b $cj "$base/api/tree"
 Status '登出后访问 -> 401' 401 $code
 
 Write-Output ''
-Write-Output '=== 10. 前端页面与静态资源 ==='
+Write-Output '=== 11. 前端页面与静态资源 ==='
 
 $code = curl.exe -s -o NUL -w "%{http_code}" "$base/"
 Status '首页 -> 200' 200 $code

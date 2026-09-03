@@ -207,6 +207,8 @@ function promptBox(title, placeholder = '', value = '') {
 }
 
 /* ================= 登录 / 初始化 ================= */
+const isGuest = () => state.user && state.user.role === 'guest';
+
 function showLogin() {
   $('#app').hidden = true;
   $('#login').hidden = false;
@@ -215,6 +217,7 @@ function showLogin() {
     : '请登录以访问你的笔记';
   $('#btnLogin').textContent = state.needsSetup ? '创建账号' : '登 录';
   $('#loginError').hidden = true;
+  document.body.classList.remove('previewing', 'sidebar-collapsed', 'guest');
 }
 
 async function submitAuth(e) {
@@ -229,6 +232,7 @@ async function submitAuth(e) {
       body: JSON.stringify({ username, password }),
     });
     state.user = res.user;
+    state.needsSetup = false; // 账号已存在，之后均为普通登录
     enterApp();
   } catch (err) {
     errEl.textContent = err.message;
@@ -236,10 +240,28 @@ async function submitAuth(e) {
   }
 }
 
+// 按角色调整界面：游客隐藏所有写操作（上传/下载/删除/建目录）
+function applyRoleUI() {
+  const guest = isGuest();
+  const adminEls = ['btnUpload', 'btnUploadDir', 'btnNewDir', 'btnZip', 'btnDownloadNote', 'btnUsers', 'optRow'];
+  adminEls.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = guest;
+  });
+  const roleEl = $('#userRole');
+  if (roleEl) {
+    roleEl.textContent = guest ? '游客' : '管理员';
+    roleEl.hidden = false;
+    roleEl.classList.toggle('guest', guest);
+  }
+  document.body.classList.toggle('guest', guest);
+}
+
 async function enterApp() {
   $('#login').hidden = true;
   $('#app').hidden = false;
   $('#userName').textContent = state.user.username;
+  applyRoleUI();
   await refreshTree();
   navigateFromHash();
 }
@@ -251,6 +273,8 @@ async function logout() {
     /* 忽略 */
   }
   state.user = null;
+  state.needsSetup = false; // 已有账号，登出后回到普通登录模式
+  state.tree = null;
   showLogin();
 }
 
@@ -335,6 +359,7 @@ function navigateFromHash() {
   highlightTree();
   $('#preview').hidden = true;
   $('#filelist').hidden = false;
+  document.body.classList.remove('previewing'); // 离开阅读模式
   closeDrawer();
 }
 
@@ -390,20 +415,22 @@ function dirRow(n) {
   const name = mk('div', 'f-name', '📁 ' + n.name);
   const meta = mk('div', 'f-meta', `${(n.children || []).length} 项`);
   const actions = mk('div', 'f-actions');
-  const btnZip = mk('button', 'btn tiny', 'ZIP');
-  const btnDel = mk('button', 'btn tiny danger', '删除');
-  actions.append(btnZip, btnDel);
   row.append(name, meta, actions);
   row.classList.add('clickable');
   row.onclick = () => go('#dir/' + encodeURIComponent(n.rel));
-  btnZip.onclick = (e) => {
-    e.stopPropagation();
-    downloadZip(n.rel);
-  };
-  btnDel.onclick = (e) => {
-    e.stopPropagation();
-    delNode(n);
-  };
+  if (!isGuest()) {
+    const btnZip = mk('button', 'btn tiny', 'ZIP');
+    const btnDel = mk('button', 'btn tiny danger', '删除');
+    btnZip.onclick = (e) => {
+      e.stopPropagation();
+      downloadZip(n.rel);
+    };
+    btnDel.onclick = (e) => {
+      e.stopPropagation();
+      delNode(n);
+    };
+    actions.append(btnZip, btnDel);
+  }
   return row;
 }
 
@@ -415,6 +442,8 @@ function fileRow(n) {
   const name = mk('div', 'f-name', `${icon} ${n.name}`);
   const meta = mk('div', 'f-meta', `${fmtSize(n.size)} · ${fmtTime(n.mtime)}`);
   const actions = mk('div', 'f-actions');
+  row.append(name, meta, actions);
+  row.classList.add('clickable');
   if (isMd) {
     const btnView = mk('button', 'btn tiny', '查看');
     btnView.onclick = (e) => {
@@ -422,6 +451,7 @@ function fileRow(n) {
       openPreviewFromList(n.rel);
     };
     actions.appendChild(btnView);
+    row.onclick = () => openPreviewFromList(n.rel);
   } else if (isImg) {
     const btnView = mk('button', 'btn tiny', '查看');
     btnView.onclick = (e) => {
@@ -429,22 +459,21 @@ function fileRow(n) {
       window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
     };
     actions.appendChild(btnView);
+    row.onclick = () => window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
   }
-  const btnDl = mk('button', 'btn tiny', '下载');
-  btnDl.onclick = (e) => {
-    e.stopPropagation();
-    window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
-  };
-  const btnDel = mk('button', 'btn tiny danger', '删除');
-  btnDel.onclick = (e) => {
-    e.stopPropagation();
-    delNode(n);
-  };
-  actions.append(btnDl, btnDel);
-  row.append(name, meta, actions);
-  row.classList.add('clickable');
-  if (isMd) row.onclick = () => openPreviewFromList(n.rel);
-  else if (isImg) row.onclick = () => window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
+  if (!isGuest()) {
+    const btnDl = mk('button', 'btn tiny', '下载');
+    btnDl.onclick = (e) => {
+      e.stopPropagation();
+      window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
+    };
+    const btnDel = mk('button', 'btn tiny danger', '删除');
+    btnDel.onclick = (e) => {
+      e.stopPropagation();
+      delNode(n);
+    };
+    actions.append(btnDl, btnDel);
+  }
   return row;
 }
 
@@ -520,6 +549,7 @@ async function openPreview(rel) {
   $('#previewTitle').textContent = rel.split('/').pop();
   const body = $('#noteBody');
   body.innerHTML = '<p class="loading">加载中…</p>';
+  document.body.classList.add('previewing'); // 阅读模式（手机端隐藏页眉、操作栏吸顶）
   try {
     const text = await apiText('/api/file?path=' + encodeURIComponent(rel));
     // 先修复含空格（等）的图片/链接目标，再交给 marked 解析
@@ -732,6 +762,70 @@ function downloadZip(rel) {
   window.location = '/api/zip?path=' + encodeURIComponent(rel || '');
 }
 
+/* ================= 用户管理 ================= */
+async function openUsers() {
+  try {
+    const data = await api('/api/auth/users');
+    renderUsers(data.users || []);
+  } catch (e) {
+    toast(e.message);
+    return;
+  }
+  $('#usersModal').hidden = false;
+}
+
+function renderUsers(users) {
+  const list = $('#usersList');
+  list.innerHTML = '';
+  const me = state.user ? state.user.username : '';
+  users.forEach((u) => {
+    const row = mk('div', 'user-item');
+    const name = mk('span', 'user-item-name', u.username + (u.username === me ? '（我）' : ''));
+    const chip = mk('span', 'role-chip' + (u.role === 'guest' ? ' guest' : ''), u.role === 'guest' ? '游客' : '管理员');
+    row.append(name, chip);
+    if (u.role === 'guest' && u.username !== me) {
+      const btnDel = mk('button', 'btn tiny danger', '删除');
+      btnDel.onclick = async () => {
+        const ok = await confirmBox('删除账号', `确定删除游客账号「${u.username}」吗？该账号将立即无法登录。`, '删除');
+        if (!ok) return;
+        try {
+          await api('/api/auth/users/' + encodeURIComponent(u.username), { method: 'DELETE' });
+          toast('已删除');
+          const data = await api('/api/auth/users');
+          renderUsers(data.users || []);
+        } catch (e) {
+          toast(e.message);
+        }
+      };
+      row.appendChild(btnDel);
+    }
+    list.appendChild(row);
+  });
+  if (!users.length) list.appendChild(mk('div', 'user-item', '暂无用户'));
+}
+
+async function createGuest() {
+  const username = $('#nuUser').value.trim();
+  const password = $('#nuPass').value;
+  if (!username || !password) {
+    toast('请填写用户名和密码');
+    return;
+  }
+  try {
+    await api('/api/auth/users', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    $('#nuUser').value = '';
+    $('#nuPass').value = '';
+    toast(`已创建游客账号 ${username}`);
+    const data = await api('/api/auth/users');
+    renderUsers(data.users || []);
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
 /* ================= 移动端抽屉 ================= */
 function closeDrawer() {
   $('#sidebar').classList.remove('open');
@@ -745,14 +839,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#btnLogout').onclick = logout;
   $('#btnRefreshTree').onclick = refreshTree;
 
-  $('#btnUpload').onclick = () => $('#fileInput').click();
-  $('#btnUploadDir').onclick = () => $('#dirInput').click();
+  $('#btnUpload').onclick = () => {
+    if (isGuest()) return toast('游客仅可在线查看');
+    $('#fileInput').click();
+  };
+  $('#btnUploadDir').onclick = () => {
+    if (isGuest()) return toast('游客仅可在线查看');
+    $('#dirInput').click();
+  };
   $('#fileInput').addEventListener('change', (e) => {
-    startUpload(e.target.files);
+    if (!isGuest()) startUpload(e.target.files);
     e.target.value = '';
   });
   $('#dirInput').addEventListener('change', (e) => {
-    startUpload(e.target.files);
+    if (!isGuest()) startUpload(e.target.files);
     e.target.value = '';
   });
   $('#btnNewDir').onclick = createDir;
@@ -772,10 +872,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (a) e.preventDefault(); // hash 变更由浏览器触发 hashchange
   });
 
-  // 移动端抽屉
+  // 用户管理
+  $('#btnUsers').onclick = openUsers;
+  $('#nuClose').onclick = () => {
+    $('#usersModal').hidden = true;
+  };
+  $('#nuCreate').onclick = createGuest;
+  $('#nuPass').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') createGuest();
+  });
+
+  // 侧栏：手机端=抽屉；电脑端=收起/展开
   $('#btnMenu').onclick = () => {
-    $('#sidebar').classList.add('open');
-    $('#mask').hidden = false;
+    if (state.mobile) {
+      $('#sidebar').classList.add('open');
+      $('#mask').hidden = false;
+    } else {
+      document.body.classList.toggle('sidebar-collapsed');
+    }
   };
   $('#mask').onclick = closeDrawer;
   window.addEventListener('resize', () => {
@@ -799,7 +913,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     dragDepth = 0;
     document.body.classList.remove('dragging');
     if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-      startUpload(e.dataTransfer.files);
+      if (isGuest()) toast('游客仅可在线查看，不能上传');
+      else startUpload(e.dataTransfer.files);
     }
   });
   document.body.addEventListener('dragenter', () => document.body.classList.add('dragging'));
