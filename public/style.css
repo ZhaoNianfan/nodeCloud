@@ -797,11 +797,8 @@ button {
 
   .file-row { gap: 8px; padding: 12px 10px; }
 
-  /* 阅读模式：隐藏页眉（上传等按钮所在处），内容区顶到屏幕顶部，
-     操作栏（返回/文件名/原文/下载）吸顶固定在页面头部；
-     向下滑动自动收起、向上滑动唤出，随时可返回 */
-  body.previewing .topbar { display: none; }
-
+  /* 阅读模式（移动端）：内容区顶到屏幕顶部、卡片全宽，
+     操作栏（返回/文件名/原文/下载）吸顶并支持 下滑收起/上滑唤出 */
   body.previewing #content { padding: 0; }
 
   body.previewing .preview {
@@ -822,3 +819,7 @@ button {
     transform: translateY(-100%);
   }
 }
+
+/* 阅读模式（所有设备）：隐藏顶部工具栏（上传文件/上传文件夹/新建/下载ZIP），
+   避免出现"双页眉" */
+body.previewing .topbar { display: none; }
