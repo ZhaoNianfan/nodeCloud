@@ -1,0 +1,30 @@
+{
+  "name": "notecloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "轻量 Markdown 笔记云：可视化上传/下载、在线查看、相对路径图片、登录鉴权",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "setup": "node scripts/create-user.js",
+    "build:vendor": "node scripts/build-vendor.js",
+    "test:frontend": "node test/check-frontend.js",
+    "test:ui": "node test/smoke-ui.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "dompurify": "^3.2.4",
+    "express": "^4.21.2",
+    "highlight.js": "^11.11.1",
+    "marked": "^12.0.2",
+    "multer": "^2.0.2"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}
