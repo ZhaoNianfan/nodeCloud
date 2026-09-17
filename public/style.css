@@ -447,6 +447,20 @@ button {
 
 .preview-actions { display: flex; gap: 6px; }
 
+/* 预览栏面包屑（手机端显示，用于导航回上级目录） */
+.preview-breadcrumb {
+  flex: 1;
+  min-width: 0;
+  display: none; /* 电脑端隐藏，用顶栏面包屑 */
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.preview-breadcrumb::-webkit-scrollbar { display: none; }
+
 .note-body {
   padding: 24px 32px 48px;
   line-height: 1.75;
@@ -926,6 +940,7 @@ body.toc-collapsed .toc-title { display: none; }
   left: 0;
   right: 0;
   bottom: 0;
+  min-height: 200px;
   max-height: 62vh;
   background: var(--panel);
   border-radius: 14px 14px 0 0;
@@ -949,12 +964,21 @@ body.toc-collapsed .toc-title { display: none; }
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .toc-drawer .toc-list {
   overflow-y: auto;
-  max-height: 50vh;
+  flex: 1;
+  min-height: 0;
   padding: 8px;
+}
+
+.toc-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 /* ============ 全文搜索 ============ */
@@ -1149,6 +1173,10 @@ body.editing .editor {
   body.previewing.editing .toc-btn { display: none; }
 
   body.previewing .preview-wrap { min-height: 100%; }
+
+  /* 手机端预览栏：显示面包屑导航，隐藏返回按钮和文件名 */
+  body.previewing .preview-breadcrumb { display: flex; }
+  body.previewing .preview-title { display: none; }
 
   .prev-next { padding: 12px 18px 20px; }
 

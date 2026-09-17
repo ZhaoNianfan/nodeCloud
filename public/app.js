@@ -396,6 +396,30 @@ function renderBreadcrumb() {
   });
 }
 
+/* 手机端阅读模式：在预览栏显示面包屑导航 */
+function renderMobileBreadcrumb() {
+  const el = $('#previewBreadcrumb');
+  if (!el) return;
+  el.innerHTML = '';
+  if (!state.view) { el.hidden = true; return; }
+  // 从文件路径提取目录层级
+  const parts = state.view.split('/');
+  const fileName = parts.pop(); // 去掉文件名
+  if (parts.length === 0) { el.hidden = true; return; }
+  el.hidden = false;
+  const rootCrumb = mk('span', 'crumb', '全部笔记');
+  rootCrumb.onclick = () => go('#dir/');
+  el.appendChild(rootCrumb);
+  let acc = '';
+  parts.forEach((s, i) => {
+    acc = acc ? acc + '/' + s : s;
+    const sep = mk('span', 'crumb-sep', '/');
+    const c = mk('span', 'crumb', s);
+    c.onclick = () => go('#dir/' + encodeURIComponent(acc));
+    el.append(sep, c);
+  });
+}
+
 /* ================= 文件列表 ================= */
 function renderList() {
   const el = $('#filelist');
@@ -648,6 +672,7 @@ async function openPreview(rel) {
     if (scroller) scroller.scrollTop = 0;
     setupToc();
     renderPrevNext(rel);
+    renderMobileBreadcrumb();
   } catch (err) {
     body.innerHTML = '<p class="error-text">' + escapeHtml(err.message) + '</p>';
     $('#tocList').innerHTML = '';
@@ -682,7 +707,11 @@ function setupToc() {
     tocObserver = null;
   }
   $('#toc').hidden = headings.length === 0;
-  if (!headings.length) return;
+  if (!headings.length) {
+    // 笔记没有标题时，抽屉显示提示
+    drawerList.appendChild(mk('div', 'toc-empty', '此笔记没有目录标题'));
+    return;
+  }
 
   // 给每个标题分配唯一 id，用于锚点跳转与滚动高亮
   const used = new Set();
