@@ -109,6 +109,7 @@ const state = {
   needsSetup: false,
   uploading: false,
   mobile: window.innerWidth < 900,
+  cacheBust: 0, // 缓存破坏时间戳
 };
 
 /* ================= API ================= */
@@ -671,7 +672,8 @@ async function openPreview(rel) {
   // 根据归属决定是否显示编辑按钮
   updateEditButton(rel);
   try {
-    const text = await apiText('/api/file?path=' + encodeURIComponent(rel));
+    const cacheBust = state.cacheBust ? '&t=' + state.cacheBust : '';
+    const text = await apiText('/api/file?path=' + encodeURIComponent(rel) + cacheBust);
     state.noteContent = text;
     renderMarkdown(body, text, rel);
     // 回到内容区顶部
@@ -1097,6 +1099,8 @@ async function saveEdit() {
     toast('已保存');
     exitEditor();
     await refreshTree();
+    // 加时间戳绕过浏览器缓存，确保看到最新内容
+    state.cacheBust = Date.now();
     await openPreview(state.view);
   } catch (e) {
     toast('保存失败: ' + e.message);
