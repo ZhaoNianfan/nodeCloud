@@ -154,6 +154,20 @@ router.get('/search', async (req, res, next) => {
   }
 });
 
+// ---------- 文件归属检查 ----------
+router.get('/ownership', (req, res) => {
+  const rel = String(req.query.path || '');
+  if (!rel) return res.json({ canEdit: false });
+  // 管理员可编辑任何文件
+  if (req.user.role === 'admin') return res.json({ canEdit: true });
+  // 游客不可编辑
+  if (req.user.role === 'guest') return res.json({ canEdit: false });
+  // 普通用户：检查是否是自己上传的
+  const rec = state.uploads ? state.uploads.get(rel) : null;
+  const canEdit = rec && rec.uploader === req.user.username;
+  res.json({ canEdit });
+});
+
 // ---------- 上传 ----------
 // 请求：multipart，字段 path=目标相对路径(含文件名)，overwrite=1|0，file=文件
 router.post('/upload', canWrite, upload.array('file', 500), async (req, res, next) => {

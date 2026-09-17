@@ -127,7 +127,7 @@ router.put('/users/:username/role', auth.requireAuth, auth.requireRole('admin'),
   }
 });
 
-// 删除游客账号（不能删自己/管理员）
+// 删除用户（不能删自己/管理员）
 router.delete('/users/:username', auth.requireAuth, auth.requireRole('admin'), (req, res, next) => {
   try {
     const target = state.users.find(req.params.username);
@@ -139,8 +139,8 @@ router.delete('/users/:username', auth.requireAuth, auth.requireRole('admin'), (
     if (target.username === req.user.username) {
       return res.status(400).json({ error: '不能删除当前登录的账号' });
     }
-    if (target.role !== 'guest') {
-      return res.status(403).json({ error: '只能删除游客账号' });
+    if (target.role === 'admin') {
+      return res.status(403).json({ error: '不能删除管理员账号' });
     }
     const removed = state.users.remove(target.username);
     res.json({ ok: true, user: removed });

@@ -480,7 +480,8 @@ function fileRow(n) {
     actions.appendChild(btnView);
     row.onclick = () => window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
   }
-  if (isAdmin()) {
+  // 所有非游客用户都可以下载
+  if (!isGuest()) {
     const btnDl = mk('button', 'btn tiny', '下载');
     btnDl.onclick = (e) => {
       e.stopPropagation();
@@ -560,6 +561,23 @@ function showImgBroken(img) {
 }
 
 /* ================= 笔记预览 ================= */
+
+// 根据文件归属决定是否显示编辑按钮
+async function updateEditButton(rel) {
+  const btn = $('#btnEdit');
+  if (!btn) return;
+  // 游客永远不能编辑
+  if (isGuest()) { btn.hidden = true; return; }
+  // 管理员可以编辑任何文件
+  if (isAdmin()) { btn.hidden = false; return; }
+  // 普通用户：查询归属接口
+  try {
+    const data = await api('/api/ownership?path=' + encodeURIComponent(rel));
+    btn.hidden = !data.canEdit;
+  } catch (e) {
+    btn.hidden = true;
+  }
+}
 
 // 把 Markdown 文本渲染进指定容器（预览 / 编辑器实时预览共用）：
 // 空格修复 → marked 解析 → DOMPurify 消毒 → 图片/链接相对路径重写 → 表格滚动 → 代码高亮
@@ -643,6 +661,8 @@ async function openPreview(rel) {
   document.body.classList.add('previewing'); // 阅读模式（手机端隐藏页眉、操作栏吸顶）
   resetReadBar();
   closeTocDrawer();
+  // 根据归属决定是否显示编辑按钮
+  updateEditButton(rel);
   try {
     const text = await apiText('/api/file?path=' + encodeURIComponent(rel));
     state.noteContent = text;
@@ -1150,6 +1170,21 @@ function renderUsers(users) {
       const btnDel = mk('button', 'btn tiny danger', '删除');
       btnDel.onclick = async () => {
         const ok = await confirmBox('删除账号', `确定删除游客账号「${u.username}」吗？该账号将立即无法登录。`, '删除');
+        if (!ok) return;
+        try {
+          await api('/api/auth/users/' + encodeURIComponent(u.username), { method: 'DELETE' });
+          toast('已删除');
+          const data = await api('/api/auth/users');
+          renderUsers(data.users || []);
+        } catch (e) {
+          toast(e.message);
+        }
+      };
+      row.appendChild(btnDel);
+    } else if (u.role === 'user' && u.username !== me) {
+      const btnDel = mk('button', 'btn tiny danger', '删除');
+      btnDel.onclick = async () => {
+        const ok = await confirmBox('删除账号', `确定删除普通用户「${u.username}」吗？该账号将立即无法登录。`, '删除');
         if (!ok) return;
         try {
           await api('/api/auth/users/' + encodeURIComponent(u.username), { method: 'DELETE' });

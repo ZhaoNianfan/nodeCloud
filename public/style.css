@@ -716,7 +716,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 110;
+  z-index: 130;
   padding: 20px;
 }
 
@@ -917,9 +917,9 @@ body.toc-collapsed .toc-title { display: none; }
 
 /* 下滑收起时，TOC 按钮跟着隐藏 */
 body.bar-hidden .toc-btn {
-  transform: translateY(calc(100% + 30px));
-  opacity: 0;
-  pointer-events: none;
+  transform: translateY(calc(100% + 30px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .toc-mask {
