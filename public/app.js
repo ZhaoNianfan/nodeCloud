@@ -940,7 +940,7 @@ async function startUpload(fileList) {
   state.uploading = false;
   $('#btnUpload').disabled = false;
   $('#btnUploadDir').disabled = false;
-  await refreshTree();
+  await Promise.all([refreshTree(), loadMyFiles()]);
   const parts = [`成功 ${out.ok} 个`];
   if (out.notes.length) parts.push(out.notes.slice(0, 5).join('；') + (out.notes.length > 5 ? ` 等 ${out.notes.length} 条` : ''));
   if (out.errors.length) parts.push('失败：' + out.errors.join('；'));
