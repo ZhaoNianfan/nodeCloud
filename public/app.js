@@ -251,12 +251,15 @@ function applyRoleUI() {
     const el = document.getElementById(id);
     if (el) el.hidden = guest || !admin;
   });
-  // 管理员 + 普通用户可操作（上传/编辑/下载笔记）
-  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnEdit', 'btnDownloadNote'];
+  // 管理员 + 普通用户可操作（上传/下载笔记）
+  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnDownloadNote'];
   writeOnly.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest;
   });
+  // 编辑按钮：默认隐藏，由 updateEditButton 按归属显示
+  const editBtn = document.getElementById('btnEdit');
+  if (editBtn) editBtn.hidden = true;
   const roleEl = $('#userRole');
   if (roleEl) {
     const label = guest ? '游客' : admin ? '管理员' : '普通用户';
@@ -1052,6 +1055,13 @@ function setEditorTab(showEdit) {
 
 async function enterEditor() {
   if (!state.view || isGuest()) return;
+  // 二次校验归属：普通用户只能编辑自己的文件
+  if (!isAdmin()) {
+    try {
+      const own = await api('/api/ownership?path=' + encodeURIComponent(state.view));
+      if (!own.canEdit) { toast('只能编辑自己上传的笔记'); return; }
+    } catch (e) { toast('权限检查失败'); return; }
+  }
   try {
     const text = await apiText('/api/file?path=' + encodeURIComponent(state.view));
     state.noteContent = text;
