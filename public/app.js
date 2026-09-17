@@ -103,13 +103,14 @@ function fmtTime(ms) {
 /* ================= 状态 ================= */
 const state = {
   tree: null,
-  cur: '', // 当前目录（相对路径）
-  view: null, // 正在预览的笔记相对路径
+  cur: '',
+  view: null,
   user: null,
   needsSetup: false,
   uploading: false,
   mobile: window.innerWidth < 900,
-  cacheBust: 0, // 缓存破坏时间戳
+  cacheBust: 0,
+  myFiles: [], // 当前用户拥有的文件列表
 };
 
 /* ================= API ================= */
@@ -211,6 +212,26 @@ function promptBox(title, placeholder = '', value = '') {
 const isGuest = () => state.user && state.user.role === 'guest';
 const isAdmin = () => state.user && state.user.role === 'admin';
 
+// 前端判断文件是否属于当前用户（需先调用 loadMyFiles）
+function isFileOwnerClient(fileRel) {
+  if (!state.user || state.user.role === 'guest') return false;
+  return state.myFiles && state.myFiles.includes(fileRel);
+}
+
+// 加载当前用户拥有的文件列表
+async function loadMyFiles() {
+  if (!state.user || state.user.role === 'admin' || state.user.role === 'guest') {
+    state.myFiles = [];
+    return;
+  }
+  try {
+    const data = await api('/api/my-files');
+    state.myFiles = data.files || [];
+  } catch (e) {
+    state.myFiles = [];
+  }
+}
+
 function showLogin() {
   $('#app').hidden = true;
   $('#login').hidden = false;
@@ -252,11 +273,17 @@ function applyRoleUI() {
     const el = document.getElementById(id);
     if (el) el.hidden = guest || !admin;
   });
-  // 管理员 + 普通用户可操作（上传/下载/新建文件夹/下载ZIP）
-  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnDownloadNote', 'btnNewDir', 'btnZip'];
+  // 管理员 + 普通用户可操作（上传/新建文件夹）
+  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnNewDir'];
   writeOnly.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest;
+  });
+  // 所有用户可见（含游客）：下载 ZIP、预览下载
+  const allVisible = ['btnZip', 'btnDownloadNote'];
+  allVisible.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = false;
   });
   // 编辑按钮：默认隐藏，由 updateEditButton 按归属显示
   const editBtn = document.getElementById('btnEdit');
@@ -278,7 +305,7 @@ async function enterApp() {
   $('#app').hidden = false;
   $('#userName').textContent = state.user.username;
   applyRoleUI();
-  await refreshTree();
+  await Promise.all([refreshTree(), loadMyFiles()]);
   navigateFromHash();
 }
 
@@ -487,15 +514,15 @@ function fileRow(n) {
     actions.appendChild(btnView);
     row.onclick = () => window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
   }
-  // 所有非游客用户都可以下载；游客也可以下载
+  // 所有用户都可以下载；游客也可以下载
   const btnDl = mk('button', 'btn tiny', '下载');
   btnDl.onclick = (e) => {
     e.stopPropagation();
     window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
   };
   actions.appendChild(btnDl);
-  // 删除按钮：游客不显示，非游客都显示（后端校验文件归属）
-  if (!isGuest()) {
+  // 删除按钮：只有 owner 或 admin 能看到
+  if (isAdmin() || isFileOwnerClient(n.rel)) {
     const btnDel = mk('button', 'btn tiny danger', '删除');
     btnDel.onclick = (e) => {
       e.stopPropagation();

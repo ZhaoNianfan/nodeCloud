@@ -861,16 +861,21 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
 }
 
-.toc-list { padding: 8px 6px; }
+.toc-head .icon-btn {
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.toc-list { padding: 6px 4px; }
 
 .toc-item {
   display: block;
-  padding: 5px 10px;
+  padding: 4px 8px;
   color: var(--muted);
   text-decoration: none;
   border-radius: 6px;
@@ -881,6 +886,9 @@ button {
 }
 
 .toc-item:hover { background: var(--bg); color: var(--text); }
+
+/* 长标题悬停显示完整内容 */
+.toc-item:hover { white-space: normal; word-break: break-all; }
 
 .toc-item.active {
   color: var(--accent);
@@ -897,9 +905,9 @@ button {
 .toc-item.toc-l6 { padding-left: 70px; }
 
 /* 折叠：收成一条窄栏，仅留展开按钮 */
-body.toc-collapsed .toc { width: 40px; }
+body.toc-collapsed .toc { width: 32px; }
 body.toc-collapsed .toc-list { display: none; }
-body.toc-collapsed .toc-head { justify-content: center; padding: 10px 0; }
+body.toc-collapsed .toc-head { justify-content: center; padding: 8px 0; }
 body.toc-collapsed .toc-title { display: none; }
 
 /* 手机端目录：底部按钮 + 抽屉 */

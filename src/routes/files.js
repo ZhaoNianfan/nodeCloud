@@ -137,6 +137,19 @@ router.get('/ownership', (req, res) => {
   res.json({ canEdit: isFileOwner(req.user.role, req.user.username, rel) });
 });
 
+// ========== 获取当前用户拥有的所有文件 ==========
+router.get('/my-files', (req, res) => {
+  if (req.user.role === 'admin') return res.json({ files: [] }); // admin 不需要
+  if (req.user.role === 'guest') return res.json({ files: [] });
+  const myFiles = [];
+  if (state.uploads) {
+    for (const [rel, rec] of Object.entries(state.uploads.map || {})) {
+      if (rec.uploader === req.user.username) myFiles.push(rel);
+    }
+  }
+  res.json({ files: myFiles });
+});
+
 // ========== 上传 ==========
 router.post('/upload', canWrite, upload.array('file', 500), async (req, res, next) => {
   const files = req.files || [];
