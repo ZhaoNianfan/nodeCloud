@@ -866,11 +866,11 @@ button {
   font-weight: 600;
 }
 
-.toc-list { padding: 4px 6px; }
+.toc-list { padding: 8px 6px; }
 
 .toc-item {
   display: block;
-  padding: 4px 10px;
+  padding: 5px 10px;
   color: var(--muted);
   text-decoration: none;
   border-radius: 6px;
@@ -878,7 +878,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
 }
 
 .toc-item:hover { background: var(--bg); color: var(--text); }
@@ -935,8 +934,8 @@ body.bar-hidden .toc-btn {
   left: 0;
   right: 0;
   bottom: 0;
-  min-height: 180px;
-  max-height: 50vh;
+  min-height: 200px;
+  max-height: 62vh;
   background: var(--panel);
   border-radius: 14px 14px 0 0;
   z-index: 85;
@@ -956,7 +955,7 @@ body.bar-hidden .toc-btn {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
   flex-shrink: 0;
@@ -966,11 +965,11 @@ body.bar-hidden .toc-btn {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  padding: 4px 8px;
+  padding: 8px;
 }
 
 .toc-empty {
-  padding: 12px;
+  padding: 20px;
   text-align: center;
   color: var(--muted);
   font-size: 13px;
