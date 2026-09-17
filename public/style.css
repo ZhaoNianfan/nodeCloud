@@ -907,7 +907,7 @@ body.toc-collapsed .toc-title { display: none; }
   display: none;
   position: fixed;
   right: 14px;
-  bottom: 60px;
+  bottom: 120px;
   z-index: 70;
   border-radius: 20px;
   padding: 9px 16px;
