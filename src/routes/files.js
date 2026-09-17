@@ -216,7 +216,18 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
         } while (fs.existsSync(candidate));
         await fsp.rename(f.path, candidate);
         finalRel = path.relative(config.notesRoot, candidate).split(path.sep).join('/');
-        if (state.uploads) state.uploads.record(finalRel, req.user.username);
+        if (state.uploads) {
+        state.uploads.record(finalRel, req.user.username);
+        // 同时记录所有父文件夹的归属
+        const parts = finalRel.split('/');
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? acc + '/' + parts[i] : parts[i];
+          if (!state.uploads.get(acc)) {
+            state.uploads.record(acc, req.user.username);
+          }
+        }
+      }
         results.push({ rel: finalRel, size: f.size, conflict: true, renamed: true });
         continue;
       }
@@ -234,7 +245,18 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
           throw e;
         }
       }
-      if (state.uploads) state.uploads.record(finalRel, req.user.username);
+      if (state.uploads) {
+        state.uploads.record(finalRel, req.user.username);
+        // 同时记录所有父文件夹的归属
+        const parts = finalRel.split('/');
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? acc + '/' + parts[i] : parts[i];
+          if (!state.uploads.get(acc)) {
+            state.uploads.record(acc, req.user.username);
+          }
+        }
+      }
       results.push({ rel: finalRel, size: f.size, conflict: existedBefore, renamed: false });
     }
     res.json({ ok: true, files: results });
