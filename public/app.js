@@ -241,18 +241,18 @@ async function submitAuth(e) {
   }
 }
 
-// 按角色调整界面：游客仅可查看；普通用户可上传/编辑；管理员拥有全部权限
+// 按角色调整界面：游客仅可查看；普通用户可上传/编辑/下载；管理员拥有全部权限
 function applyRoleUI() {
   const guest = isGuest();
   const admin = isAdmin();
   // 管理员专属操作
-  const adminOnly = ['btnNewDir', 'btnZip', 'btnDownloadNote', 'btnUsers'];
+  const adminOnly = ['btnNewDir', 'btnZip', 'btnUsers'];
   adminOnly.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest || !admin;
   });
-  // 管理员 + 普通用户可写操作（上传/编辑）
-  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnEdit'];
+  // 管理员 + 普通用户可操作（上传/编辑/下载笔记）
+  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnEdit', 'btnDownloadNote'];
   writeOnly.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest;
@@ -487,12 +487,16 @@ function fileRow(n) {
       e.stopPropagation();
       window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
     };
-    const btnDel = mk('button', 'btn tiny danger', '删除');
-    btnDel.onclick = (e) => {
-      e.stopPropagation();
-      delNode(n);
-    };
-    actions.append(btnDl, btnDel);
+    actions.appendChild(btnDl);
+    // 删除按钮：管理员可删任何文件，普通用户只能删自己的
+    if (isAdmin() || n.owner === state.user.username) {
+      const btnDel = mk('button', 'btn tiny danger', '删除');
+      btnDel.onclick = (e) => {
+        e.stopPropagation();
+        delNode(n);
+      };
+      actions.appendChild(btnDel);
+    }
   }
   return row;
 }
@@ -1075,7 +1079,7 @@ function exitEditor() {
 async function saveEdit() {
   if (!state.view) return;
   try {
-    await api('/api/edit', {
+    const res = await api('/api/edit', {
       method: 'PUT',
       body: JSON.stringify({ path: state.view, content: $('#editorText').value }),
     });
@@ -1085,7 +1089,7 @@ async function saveEdit() {
     await refreshTree();
     await openPreview(state.view);
   } catch (e) {
-    toast(e.message);
+    toast('保存失败: ' + e.message);
   }
 }
 

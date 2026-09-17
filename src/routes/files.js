@@ -56,7 +56,13 @@ async function buildTree(absDir, relDir) {
         size = st.size;
         mtime = st.mtimeMs;
       } catch (err) {}
-      files.push({ name: e.name, type: 'file', rel, size, mtime, isMd: MD_RE.test(e.name) });
+      const fileObj = { name: e.name, type: 'file', rel, size, mtime, isMd: MD_RE.test(e.name) };
+      // 附加归属信息（供前端判断删除/编辑权限）
+      if (state.uploads) {
+        const rec = state.uploads.get(rel);
+        if (rec) fileObj.owner = rec.uploader;
+      }
+      files.push(fileObj);
     }
     // 符号链接等其他类型一律忽略
   }
@@ -349,13 +355,23 @@ router.get('/zip', adminOnly, (req, res, next) => {
 });
 
 // ---------- 删除（文件或文件夹） ----------
-router.delete('/file', adminOnly, async (req, res, next) => {
+router.delete('/file', auth.requireAuth, async (req, res, next) => {
   try {
-    const { full } = resolveInside(config.notesRoot, req.query.path);
+    const { full, rel: cleanRel } = resolveInside(config.notesRoot, req.query.path);
     if (full === path.resolve(config.notesRoot)) {
       return res.status(400).json({ error: '不能删除根目录' });
     }
     assertRealInside(config.notesRoot, full);
+    // 权限校验：游客不能删，普通用户只能删自己的
+    if (req.user.role === 'guest') {
+      return res.status(403).json({ error: '游客仅可在线查看' });
+    }
+    if (req.user.role === 'user') {
+      const rec = state.uploads ? state.uploads.get(cleanRel) : null;
+      if (!rec || rec.uploader !== req.user.username) {
+        return res.status(403).json({ error: '只能删除自己上传的文件' });
+      }
+    }
     await fsp.rm(full, { recursive: true, force: true });
     res.json({ ok: true });
   } catch (e) {
