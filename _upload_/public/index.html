@@ -7,7 +7,7 @@
 <title>NoteCloud · 笔记云</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
 <link rel="stylesheet" href="vendor/highlight-github.css">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -36,10 +36,6 @@
     <div class="topbar">
       <button id="btnMenu" class="icon-btn" title="收起/展开导航">☰</button>
       <div id="breadcrumb" class="breadcrumb"></div>
-      <div class="search-wrap">
-        <input id="searchInput" type="search" class="search-input" placeholder="搜索笔记…" autocomplete="off">
-        <div id="searchResults" class="search-results" hidden></div>
-      </div>
       <div class="actions">
         <button id="btnUpload" class="btn">上传文件</button>
         <button id="btnUploadDir" class="btn ghost">上传文件夹</button>
@@ -50,44 +46,16 @@
 
     <div id="content">
       <div id="filelist" class="filelist"></div>
-      <div id="previewWrap" class="preview-wrap" hidden>
-        <div id="preview" class="preview">
-          <div class="preview-bar">
-            <button id="btnBack" class="btn ghost">← 返回</button>
-            <span id="previewTitle" class="preview-title"></span>
-            <div class="preview-actions">
-              <button id="btnEdit" class="btn ghost" title="编辑这篇笔记">编辑</button>
-              <button id="btnOpenRaw" class="btn ghost" title="在新窗口打开原文">原文</button>
-              <button id="btnDownloadNote" class="btn ghost">下载</button>
-            </div>
-          </div>
-          <article id="noteBody" class="note-body"></article>
-          <nav id="prevNext" class="prev-next" hidden></nav>
-        </div>
-        <aside id="toc" class="toc" hidden>
-          <div class="toc-head">
-            <span class="toc-title">目录</span>
-            <button id="btnTocCollapse" class="icon-btn" title="折叠/展开目录">▾</button>
-          </div>
-          <nav id="tocList" class="toc-list"></nav>
-        </aside>
-      </div>
-      <div id="editor" class="editor" hidden>
-        <div class="editor-bar">
-          <span id="editorTitle" class="editor-title"></span>
-          <div class="editor-actions">
-            <button id="btnEditorCancel" class="btn ghost">取消</button>
-            <button id="btnEditorSave" class="btn">保存</button>
+      <div id="preview" class="preview" hidden>
+        <div class="preview-bar">
+          <button id="btnBack" class="btn ghost">← 返回</button>
+          <span id="previewTitle" class="preview-title"></span>
+          <div class="preview-actions">
+            <button id="btnOpenRaw" class="btn ghost" title="在新窗口打开原文">原文</button>
+            <button id="btnDownloadNote" class="btn ghost">下载</button>
           </div>
         </div>
-        <div class="editor-main">
-          <textarea id="editorText" class="editor-text" spellcheck="false" placeholder="在此输入 Markdown…"></textarea>
-          <div id="editorPreview" class="note-body editor-preview"></div>
-        </div>
-        <div class="editor-tabs">
-          <button id="tabEdit" class="btn tiny editor-tab active">编辑</button>
-          <button id="tabPreview" class="btn tiny ghost editor-tab">预览</button>
-        </div>
+        <article id="noteBody" class="note-body"></article>
       </div>
     </div>
 
@@ -116,16 +84,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<button id="btnToc" class="btn ghost toc-btn" title="目录">☰ 目录</button>
-<div id="tocMask" class="toc-mask" hidden></div>
-<div id="tocDrawer" class="toc-drawer" hidden>
-  <div class="toc-drawer-head">
-    <span class="toc-title">目录</span>
-    <button id="btnTocClose" class="icon-btn" title="关闭">✕</button>
-  </div>
-  <nav id="tocDrawerList" class="toc-list"></nav>
-</div>
-
 <div id="modal" class="modal" hidden>
   <div class="modal-card">
     <h3 id="modalTitle"></h3>
@@ -141,16 +99,11 @@
 <div id="usersModal" class="modal" hidden>
   <div class="modal-card users-card">
     <h3>👥 用户管理</h3>
-    <p class="hint-text">管理员可创建账号并指定角色：管理员、普通用户、游客。普通用户可上传并编辑自己上传的笔记；游客仅可在线查看。</p>
+    <p class="hint-text">正式账号（管理员）可创建游客账号；游客仅可在线查看，不能上传/下载/删除。</p>
     <div id="usersList" class="users-list"></div>
     <div class="users-create">
-      <input id="nuUser" placeholder="用户名" maxlength="32">
+      <input id="nuUser" placeholder="游客用户名" maxlength="32">
       <input id="nuPass" type="password" placeholder="密码（至少 8 位）">
-      <select id="nuRole" class="role-select" title="新账号角色">
-        <option value="guest" selected>游客</option>
-        <option value="user">普通用户</option>
-        <option value="admin">管理员</option>
-      </select>
       <button id="nuCreate" class="btn tiny">创建</button>
     </div>
     <div class="modal-btns">
@@ -164,6 +117,6 @@
 <script src="vendor/marked.min.js"></script>
 <script src="vendor/purify.min.js"></script>
 <script src="vendor/highlight.common.js"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

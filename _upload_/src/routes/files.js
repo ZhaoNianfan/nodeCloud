@@ -9,15 +9,12 @@ const archiver = require('archiver');
 
 const config = require('../config');
 const auth = require('../auth');
-const state = require('../state');
 const { resolveInside, assertRealInside, sanitizeName, normalizeRel } = require('../paths');
 
 const router = express.Router();
 
-// 写操作（建目录/删除/打包下载）仅管理员可用；游客只允许在线查看
+// 写操作（上传/建目录/删除/打包下载）仅管理员可用；游客只允许在线查看
 const adminOnly = auth.requireRole('admin');
-// 上传：管理员 + 普通用户均可（普通用户上传后成为该文件的 uploader）
-const canWrite = auth.requireRole('admin', 'user');
 
 // ---------- 上传：先落到临时目录，路由内再做冲突处理与最终落位 ----------
 const storage = multer.diskStorage({
@@ -80,83 +77,9 @@ router.get('/tree', async (req, res, next) => {
   }
 });
 
-// ---------- 全文搜索 ----------
-// 扫描 notes/ 下所有 .md，按匹配次数排序，最多返回 50 条。
-async function listMdFiles(root) {
-  const out = [];
-  const walk = async (abs, base) => {
-    let entries;
-    try {
-      entries = await fsp.readdir(abs, { withFileTypes: true });
-    } catch (e) {
-      return;
-    }
-    for (const e of entries) {
-      if (e.name.startsWith('.')) continue;
-      const absP = path.join(abs, e.name);
-      const rel = base ? base + '/' + e.name : e.name;
-      if (e.isDirectory()) await walk(absP, rel);
-      else if (e.isFile() && MD_RE.test(e.name)) out.push(rel);
-    }
-  };
-  await walk(root, '');
-  return out;
-}
-
-/** 取第一个匹配位置的前后各 50 字作为片段，并给出片段内关键词位置（用于高亮） */
-function makeSnippet(text, needle, lowerText) {
-  const first = lowerText.indexOf(needle);
-  const start = Math.max(0, first - 50);
-  const end = Math.min(text.length, first + needle.length + 50);
-  const prefix = start > 0 ? '…' : '';
-  const suffix = end < text.length ? '…' : '';
-  const snippet = prefix + text.slice(start, end) + suffix;
-  const snipLower = snippet.toLowerCase();
-  const positions = [];
-  let pos = snipLower.indexOf(needle);
-  while (pos !== -1) {
-    positions.push([pos, pos + needle.length]);
-    pos = snipLower.indexOf(needle, pos + needle.length);
-  }
-  return { snippet, positions };
-}
-
-router.get('/search', async (req, res, next) => {
-  try {
-    const q = String(req.query.q || '').trim();
-    if (!q) return res.json({ results: [] });
-    const needle = q.toLowerCase();
-    const files = await listMdFiles(config.notesRoot);
-    const results = [];
-    for (const rel of files) {
-      const full = path.join(config.notesRoot, ...rel.split('/'));
-      let text;
-      try {
-        text = await fsp.readFile(full, 'utf8');
-      } catch (e) {
-        continue;
-      }
-      const lower = text.toLowerCase();
-      let count = 0;
-      let idx = lower.indexOf(needle);
-      while (idx !== -1) {
-        count++;
-        idx = lower.indexOf(needle, idx + needle.length);
-      }
-      if (count === 0) continue;
-      const { snippet, positions } = makeSnippet(text, needle, lower);
-      results.push({ path: rel, count, snippet, positions });
-    }
-    results.sort((a, b) => b.count - a.count || a.path.localeCompare(b.path, 'zh-Hans-CN'));
-    res.json({ results: results.slice(0, 50) });
-  } catch (e) {
-    next(e);
-  }
-});
-
 // ---------- 上传 ----------
 // 请求：multipart，字段 path=目标相对路径(含文件名)，overwrite=1|0，file=文件
-router.post('/upload', canWrite, upload.array('file', 500), async (req, res, next) => {
+router.post('/upload', adminOnly, upload.array('file', 500), async (req, res, next) => {
   const files = req.files || [];
   if (files.length === 0) {
     return res.status(400).json({ error: '未收到文件' });
@@ -190,7 +113,6 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
         } while (fs.existsSync(candidate));
         await fsp.rename(f.path, candidate);
         finalRel = path.relative(config.notesRoot, candidate).split(path.sep).join('/');
-        if (state.uploads) state.uploads.record(finalRel, req.user.username);
         results.push({ rel: finalRel, size: f.size, conflict: true, renamed: true });
         continue;
       }
@@ -208,7 +130,6 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
           throw e;
         }
       }
-      if (state.uploads) state.uploads.record(finalRel, req.user.username);
       results.push({ rel: finalRel, size: f.size, conflict: existedBefore, renamed: false });
     }
     res.json({ ok: true, files: results });
@@ -258,45 +179,6 @@ router.get('/file', (req, res, next) => {
         if (err && !res.headersSent) next(err);
       });
     }
-  } catch (e) {
-    next(e);
-  }
-});
-
-// ---------- 浏览器内编辑 Markdown ----------
-// 权限：admin 任意；user 仅自己的文件；guest 返回 403。
-router.put('/edit', async (req, res, next) => {
-  try {
-    const rel = (req.body && req.body.path) || '';
-    const content = req.body && req.body.content;
-    if (typeof content !== 'string') {
-      return res.status(400).json({ error: '缺少内容' });
-    }
-    const { full, rel: cleanRel } = resolveInside(config.notesRoot, rel);
-    if (!MD_RE.test(cleanRel)) {
-      return res.status(400).json({ error: '只能编辑 Markdown 文件' });
-    }
-    if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
-      return res.status(404).json({ error: '文件不存在' });
-    }
-    assertRealInside(config.notesRoot, full);
-
-    if (req.user.role === 'guest') {
-      return res.status(403).json({ error: '游客仅可在线查看，不能编辑' });
-    }
-    if (req.user.role === 'user') {
-      const rec = state.uploads ? state.uploads.get(cleanRel) : null;
-      if (!rec || rec.uploader !== req.user.username) {
-        return res.status(403).json({ error: '只能编辑自己上传的笔记' });
-      }
-    }
-
-    // 原子写入：先写临时文件再覆盖，避免断电产生半截文件
-    const tmp = full + '.edit-' + Date.now();
-    await fsp.writeFile(tmp, content, 'utf8');
-    await fsp.rename(tmp, full);
-    if (state.uploads) state.uploads.touch(cleanRel);
-    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

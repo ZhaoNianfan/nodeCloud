@@ -9,7 +9,6 @@ const config = require('./src/config');
 const state = require('./src/state');
 const auth = require('./src/auth');
 const { UserStore } = require('./src/users');
-const { UploadStore, migrate } = require('./src/uploads');
 const authRoutes = require('./src/routes/auth');
 const fileRoutes = require('./src/routes/files');
 
@@ -21,16 +20,6 @@ fs.mkdirSync(config.tmpDir, { recursive: true });
 // 共享状态
 state.users = new UserStore(path.join(config.dataDir, 'users.json'));
 state.secret = auth.loadSecret(path.join(config.dataDir, 'secret.key'));
-state.uploads = new UploadStore(path.join(config.dataDir, 'uploads.json'));
-
-// uploads.json 迁移：首次启用编辑功能时，把所有既有 .md 归属到第一个管理员
-if (!fs.existsSync(state.uploads.file)) {
-  const firstAdmin = state.users.all().find((u) => u.role === 'admin');
-  if (firstAdmin) {
-    const n = migrate(state.uploads, config.notesRoot, firstAdmin.username);
-    console.log(`uploads.json 迁移完成：${n} 个 Markdown 文件归属到 ${firstAdmin.username}`);
-  }
-}
 
 const app = express();
 app.disable('x-powered-by');

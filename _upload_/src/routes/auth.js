@@ -4,7 +4,6 @@ const express = require('express');
 const config = require('../config');
 const auth = require('../auth');
 const state = require('../state');
-const { normalizeRole } = require('../users');
 
 const router = express.Router();
 
@@ -26,7 +25,7 @@ router.get('/status', (req, res) => {
   let user = null;
   if (payload && payload.sub) {
     const u = state.users.find(payload.sub);
-    if (u) user = { username: u.username, role: normalizeRole(u.role) };
+    if (u) user = { username: u.username, role: u.role === 'guest' ? 'guest' : 'admin' };
   }
   res.json({
     needsSetup: state.users.count() === 0,
@@ -66,7 +65,7 @@ router.post('/login', auth.loginLimiter, async (req, res, next) => {
     }
     req._loginOk();
     const user = state.users.find(username);
-    const role = normalizeRole(user.role);
+    const role = user.role === 'guest' ? 'guest' : 'admin';
     const token = auth.issueToken(username);
     auth.setAuthCookie(req, res, token);
     res.json({ ok: true, user: { username, role } });
@@ -91,37 +90,14 @@ router.get('/users', auth.requireAuth, auth.requireRole('admin'), (req, res) => 
   res.json({ users: state.users.all() });
 });
 
-// 创建账号（默认游客；可指定 role=admin|user|guest）
+// 创建游客账号（仅可在线查看）
 router.post('/users', auth.requireAuth, auth.requireRole('admin'), async (req, res, next) => {
   try {
-    const { username, password, role } = req.body || {};
+    const { username, password } = req.body || {};
     const err = validateCredentials(username, password);
     if (err) return res.status(400).json({ error: err });
-    const created = await state.users.create(username, password, role || 'guest');
-    res.json({ ok: true, user: { username: created.username, role: created.role } });
-  } catch (e) {
-    next(e);
-  }
-});
-
-// 修改用户角色（管理员专属；不能修改自己的角色）
-router.put('/users/:username/role', auth.requireAuth, auth.requireRole('admin'), (req, res, next) => {
-  try {
-    const { role } = req.body || {};
-    if (!['admin', 'user', 'guest'].includes(role)) {
-      return res.status(400).json({ error: '非法角色' });
-    }
-    const target = state.users.find(req.params.username);
-    if (!target) {
-      const err = new Error('用户不存在');
-      err.status = 404;
-      throw err;
-    }
-    if (target.username === req.user.username) {
-      return res.status(400).json({ error: '不能修改自己的角色' });
-    }
-    const updated = state.users.setRole(target.username, role);
-    res.json({ ok: true, user: updated });
+    const created = await state.users.create(username, password, 'guest');
+    res.json({ ok: true, user: { username: created.username, role: 'guest' } });
   } catch (e) {
     next(e);
   }

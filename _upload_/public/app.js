@@ -208,7 +208,6 @@ function promptBox(title, placeholder = '', value = '') {
 
 /* ================= 登录 / 初始化 ================= */
 const isGuest = () => state.user && state.user.role === 'guest';
-const isAdmin = () => state.user && state.user.role === 'admin';
 
 function showLogin() {
   $('#app').hidden = true;
@@ -218,7 +217,7 @@ function showLogin() {
     : '请登录以访问你的笔记';
   $('#btnLogin').textContent = state.needsSetup ? '创建账号' : '登 录';
   $('#loginError').hidden = true;
-  document.body.classList.remove('previewing', 'sidebar-collapsed', 'guest', 'editing', 'role-user', 'toc-collapsed');
+  document.body.classList.remove('previewing', 'sidebar-collapsed', 'guest');
 }
 
 async function submitAuth(e) {
@@ -241,32 +240,21 @@ async function submitAuth(e) {
   }
 }
 
-// 按角色调整界面：游客仅可查看；普通用户可上传/编辑；管理员拥有全部权限
+// 按角色调整界面：游客隐藏所有写操作（上传/下载/删除/建目录）
 function applyRoleUI() {
   const guest = isGuest();
-  const admin = isAdmin();
-  // 管理员专属操作
-  const adminOnly = ['btnNewDir', 'btnZip', 'btnDownloadNote', 'btnUsers'];
-  adminOnly.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.hidden = guest || !admin;
-  });
-  // 管理员 + 普通用户可写操作（上传/编辑）
-  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnEdit'];
-  writeOnly.forEach((id) => {
+  const adminEls = ['btnUpload', 'btnUploadDir', 'btnNewDir', 'btnZip', 'btnDownloadNote', 'btnUsers', 'optRow'];
+  adminEls.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest;
   });
   const roleEl = $('#userRole');
   if (roleEl) {
-    const label = guest ? '游客' : admin ? '管理员' : '普通用户';
-    roleEl.textContent = label;
+    roleEl.textContent = guest ? '游客' : '管理员';
     roleEl.hidden = false;
     roleEl.classList.toggle('guest', guest);
-    roleEl.classList.toggle('user', !admin && !guest);
   }
   document.body.classList.toggle('guest', guest);
-  document.body.classList.toggle('role-user', !admin && !guest);
 }
 
 async function enterApp() {
@@ -369,13 +357,11 @@ function navigateFromHash() {
   renderBreadcrumb();
   renderList();
   highlightTree();
-  $('#previewWrap').hidden = true;
-  $('#editor').hidden = true;
+  $('#preview').hidden = true;
   $('#filelist').hidden = false;
-  document.body.classList.remove('previewing', 'editing'); // 离开阅读/编辑模式
+  document.body.classList.remove('previewing'); // 离开阅读模式
   resetReadBar();
   closeDrawer();
-  closeTocDrawer();
 }
 
 function renderBreadcrumb() {
@@ -433,7 +419,7 @@ function dirRow(n) {
   row.append(name, meta, actions);
   row.classList.add('clickable');
   row.onclick = () => go('#dir/' + encodeURIComponent(n.rel));
-  if (isAdmin()) {
+  if (!isGuest()) {
     const btnZip = mk('button', 'btn tiny', 'ZIP');
     const btnDel = mk('button', 'btn tiny danger', '删除');
     btnZip.onclick = (e) => {
@@ -476,7 +462,7 @@ function fileRow(n) {
     actions.appendChild(btnView);
     row.onclick = () => window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
   }
-  if (isAdmin()) {
+  if (!isGuest()) {
     const btnDl = mk('button', 'btn tiny', '下载');
     btnDl.onclick = (e) => {
       e.stopPropagation();
@@ -556,237 +542,90 @@ function showImgBroken(img) {
 }
 
 /* ================= 笔记预览 ================= */
-
-// 把 Markdown 文本渲染进指定容器（预览 / 编辑器实时预览共用）：
-// 空格修复 → marked 解析 → DOMPurify 消毒 → 图片/链接相对路径重写 → 表格滚动 → 代码高亮
-function renderMarkdown(container, md, rel) {
-  const fixed = fixSpacesInInlineUrls(md);
-  const rawHtml = marked.parse(fixed, { gfm: true, breaks: true });
-  const clean = DOMPurify.sanitize(rawHtml);
-  const holder = document.createElement('div');
-  holder.innerHTML = clean;
-
-  const noteDir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
-
-  // 相对路径图片 → 鉴权接口；失败时按文件名自动查找同名文件兜底
-  $$('img', holder).forEach((img) => {
-    const src = img.getAttribute('src') || '';
-    if (!src || /^(https?:|data:|#|\/\/)/i.test(src) || src.startsWith('/')) return;
-    const resolved = resolveRel(noteDir, decodeMaybe(src));
-    img.src = '/api/file?path=' + encodeURIComponent(resolved);
-    img.loading = 'lazy';
-    img.alt = img.alt || '';
-    img.title = '实际路径: ' + resolved; // 悬停可见，便于排查
-    img.dataset.rel = resolved;
-    img.addEventListener('error', () => handleImgError(img, noteDir));
-  });
-
-  // 相对链接：.md → 站内跳转；其他相对文件 → 下载/查看；外链 → 新窗口
-  $$('a', holder).forEach((a) => {
-    const href = a.getAttribute('href') || '';
-    if (!href || href.startsWith('/')) return;
-    if (/^(https?:|mailto:|tel:)/i.test(href)) {
-      a.target = '_blank';
-      a.rel = 'noopener';
-      return;
-    }
-    if (/^(data:|#)/i.test(href)) return;
-    let raw = decodeMaybe(href);
-    // 去掉 #锚点 片段后判断/解析（站内暂时不支持标题锚点定位）
-    const fragIdx = raw.indexOf('#');
-    if (fragIdx >= 0) raw = raw.slice(0, fragIdx);
-    const resolved = resolveRel(noteDir, raw);
-    if (/\.(md|markdown)$/i.test(resolved)) {
-      a.href = '#view/' + encodeURIComponent(resolved);
-      a.classList.add('internal');
-    } else {
-      a.href = '/api/file?path=' + encodeURIComponent(resolved);
-      a.target = '_blank';
-      a.rel = 'noopener';
-    }
-  });
-
-  // 表格移动端横向滚动
-  $$('table', holder).forEach((t) => {
-    const w = document.createElement('div');
-    w.className = 'table-wrap';
-    t.parentNode.insertBefore(w, t);
-    w.appendChild(t);
-  });
-
-  // 代码高亮
-  $$('pre code', holder).forEach((block) => {
-    try {
-      hljs.highlightElement(block);
-    } catch (e) {
-      /* 忽略 */
-    }
-  });
-
-  container.innerHTML = '';
-  container.appendChild(holder.firstChild ? holder : mk('p', '', '（空笔记）'));
-}
-
 async function openPreview(rel) {
   state.view = rel;
   $('#filelist').hidden = true;
-  $('#previewWrap').hidden = false;
-  $('#editor').hidden = true;
-  document.body.classList.remove('editing');
+  const pv = $('#preview');
+  pv.hidden = false;
   $('#previewTitle').textContent = rel.split('/').pop();
   const body = $('#noteBody');
   body.innerHTML = '<p class="loading">加载中…</p>';
   document.body.classList.add('previewing'); // 阅读模式（手机端隐藏页眉、操作栏吸顶）
   resetReadBar();
-  closeTocDrawer();
   try {
     const text = await apiText('/api/file?path=' + encodeURIComponent(rel));
-    state.noteContent = text;
-    renderMarkdown(body, text, rel);
+    // 先修复含空格（等）的图片/链接目标，再交给 marked 解析
+    const fixed = fixSpacesInInlineUrls(text);
+    const rawHtml = marked.parse(fixed, { gfm: true, breaks: true });
+    const clean = DOMPurify.sanitize(rawHtml);
+    const holder = document.createElement('div');
+    holder.innerHTML = clean;
+
+    const noteDir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+
+    // 相对路径图片 → 鉴权接口；失败时按文件名自动查找同名文件兜底
+    $$('img', holder).forEach((img) => {
+      const src = img.getAttribute('src') || '';
+      if (!src || /^(https?:|data:|#|\/\/)/i.test(src) || src.startsWith('/')) return;
+      const resolved = resolveRel(noteDir, decodeMaybe(src));
+      img.src = '/api/file?path=' + encodeURIComponent(resolved);
+      img.loading = 'lazy';
+      img.alt = img.alt || '';
+      img.title = '实际路径: ' + resolved; // 悬停可见，便于排查
+      img.dataset.rel = resolved;
+      img.addEventListener('error', () => handleImgError(img, noteDir));
+    });
+
+    // 相对链接：.md → 站内跳转；其他相对文件 → 下载/查看；外链 → 新窗口
+    // 相对链接：.md → 站内跳转；其他相对文件 → 下载/查看；外链 → 新窗口
+    $$('a', holder).forEach((a) => {
+      const href = a.getAttribute('href') || '';
+      if (!href || href.startsWith('/')) return;
+      if (/^(https?:|mailto:|tel:)/i.test(href)) {
+        a.target = '_blank';
+        a.rel = 'noopener';
+        return;
+      }
+      if (/^(data:|#)/i.test(href)) return;
+      let raw = decodeMaybe(href);
+      // 去掉 #锚点 片段后判断/解析（站内暂时不支持标题锚点定位）
+      const fragIdx = raw.indexOf('#');
+      if (fragIdx >= 0) raw = raw.slice(0, fragIdx);
+      const resolved = resolveRel(noteDir, raw);
+      if (/\.(md|markdown)$/i.test(resolved)) {
+        a.href = '#view/' + encodeURIComponent(resolved);
+        a.classList.add('internal');
+      } else {
+        a.href = '/api/file?path=' + encodeURIComponent(resolved);
+        a.target = '_blank';
+        a.rel = 'noopener';
+      }
+    });
+
+    // 表格移动端横向滚动
+    $$('table', holder).forEach((t) => {
+      const w = document.createElement('div');
+      w.className = 'table-wrap';
+      t.parentNode.insertBefore(w, t);
+      w.appendChild(t);
+    });
+
+    // 代码高亮
+    $$('pre code', holder).forEach((block) => {
+      try {
+        hljs.highlightElement(block);
+      } catch (e) {
+        /* 忽略 */
+      }
+    });
+
+    body.innerHTML = '';
+    body.appendChild(holder.firstChild ? holder : mk('p', '', '（空笔记）'));
     // 回到内容区顶部
     const scroller = $('#content');
     if (scroller) scroller.scrollTop = 0;
-    setupToc();
-    renderPrevNext(rel);
   } catch (err) {
     body.innerHTML = '<p class="error-text">' + escapeHtml(err.message) + '</p>';
-    $('#tocList').innerHTML = '';
-    $('#tocDrawerList').innerHTML = '';
-    $('#toc').hidden = true;
-    $('#prevNext').hidden = true;
-  }
-}
-
-/* ================= 目录（TOC） ================= */
-let tocObserver = null;
-
-function slugify(text, fallback) {
-  const s = String(text || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w一-龥-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
-  return s || fallback;
-}
-
-function setupToc() {
-  const scroller = $('#content');
-  const headings = $$('#noteBody h1, #noteBody h2, #noteBody h3, #noteBody h4, #noteBody h5, #noteBody h6');
-  const list = $('#tocList');
-  const drawerList = $('#tocDrawerList');
-  list.innerHTML = '';
-  drawerList.innerHTML = '';
-  if (tocObserver) {
-    tocObserver.disconnect();
-    tocObserver = null;
-  }
-  $('#toc').hidden = headings.length === 0;
-  if (!headings.length) return;
-
-  // 给每个标题分配唯一 id，用于锚点跳转与滚动高亮
-  const used = new Set();
-  headings.forEach((h, i) => {
-    if (!h.id) {
-      const base = slugify(h.textContent, 'section-' + i);
-      let id = base;
-      let n = 1;
-      while (used.has(id)) id = base + '-' + n++;
-      h.id = id;
-    }
-    used.add(h.id);
-  });
-
-  headings.forEach((h) => {
-    const level = Math.min(6, Math.max(1, parseInt(h.tagName.slice(1), 10) || 1));
-    const item = mk('a', 'toc-item toc-l' + level, h.textContent);
-    item.href = '#' + h.id;
-    item.dataset.target = h.id;
-    list.appendChild(item);
-    drawerList.appendChild(item.cloneNode(true));
-  });
-
-  const bindClick = (a, closeDrawerAfter) => {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      jumpToHeading(a.dataset.target);
-      if (closeDrawerAfter) closeTocDrawer();
-    });
-  };
-  $$('.toc-item', list).forEach((a) => bindClick(a, false));
-  $$('.toc-item', drawerList).forEach((a) => bindClick(a, true));
-
-  // IntersectionObserver 滚动高亮：标题进入视口顶部附近时高亮对应目录项
-  if ('IntersectionObserver' in window) {
-    tocObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((en) => {
-          if (en.isIntersecting) setActiveToc(en.target.id);
-        });
-      },
-      { root: scroller, rootMargin: '-10% 0px -75% 0px', threshold: 0 }
-    );
-    headings.forEach((h) => tocObserver.observe(h));
-  }
-}
-
-function setActiveToc(id) {
-  $$('#tocList .toc-item').forEach((a) => a.classList.toggle('active', a.dataset.target === id));
-  $$('#tocDrawerList .toc-item').forEach((a) => a.classList.toggle('active', a.dataset.target === id));
-}
-
-function jumpToHeading(id) {
-  const h = document.getElementById(id);
-  const scroller = $('#content');
-  if (!h || !scroller) return;
-  const off = state.mobile ? 56 : 12; // 手机端留出吸顶操作栏高度
-  const rect = h.getBoundingClientRect();
-  const scRect = scroller.getBoundingClientRect();
-  scroller.scrollTo({ top: scroller.scrollTop + rect.top - scRect.top - off, behavior: 'smooth' });
-}
-
-function openTocDrawer() {
-  $('#tocDrawer').hidden = false;
-  $('#tocMask').hidden = false;
-}
-
-function closeTocDrawer() {
-  $('#tocDrawer').hidden = true;
-  $('#tocMask').hidden = true;
-}
-
-/* ================= 上下篇导航 ================= */
-function renderPrevNext(rel) {
-  const wrap = $('#prevNext');
-  wrap.innerHTML = '';
-  const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
-  const node = findNode(dir);
-  const files = (node && node.children ? node.children : [])
-    .filter((n) => n.type === 'file' && n.isMd)
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
-  const idx = files.findIndex((f) => f.rel === rel);
-  if (idx === -1 || files.length <= 1) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-  const prev = idx > 0 ? files[idx - 1] : null;
-  const next = idx < files.length - 1 ? files[idx + 1] : null;
-  if (prev) {
-    const b = mk('button', 'btn ghost', '← 上一篇');
-    b.title = prev.name;
-    b.onclick = () => (location.hash = '#view/' + encodeURIComponent(prev.rel));
-    wrap.appendChild(b);
-  } else {
-    wrap.appendChild(mk('span', 'prev-next-spacer'));
-  }
-  if (next) {
-    const b = mk('button', 'btn ghost', '下一篇 →');
-    b.title = next.name;
-    b.onclick = () => (location.hash = '#view/' + encodeURIComponent(next.rel));
-    wrap.appendChild(b);
-  } else {
-    wrap.appendChild(mk('span', 'prev-next-spacer'));
   }
 }
 
@@ -930,157 +769,6 @@ function downloadZip(rel) {
   window.location = '/api/zip?path=' + encodeURIComponent(rel || '');
 }
 
-/* ================= 全文搜索 ================= */
-let searchTimer = null;
-
-function bindSearch() {
-  const input = $('#searchInput');
-  const box = $('#searchResults');
-  const closeResults = () => {
-    box.hidden = true;
-    box.innerHTML = '';
-  };
-
-  input.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    const q = input.value.trim();
-    if (!q) {
-      closeResults();
-      return;
-    }
-    searchTimer = setTimeout(async () => {
-      try {
-        const data = await api('/api/search?q=' + encodeURIComponent(q));
-        renderSearchResults(data.results || []);
-      } catch (e) {
-        /* 搜索失败静默处理 */
-      }
-    }, 300);
-  });
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeResults();
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-wrap')) closeResults();
-  });
-}
-
-function renderSearchResults(results) {
-  const box = $('#searchResults');
-  box.innerHTML = '';
-  if (!results.length) {
-    box.appendChild(mk('div', 'search-empty', '无匹配笔记'));
-    box.hidden = false;
-    return;
-  }
-  results.forEach((r) => {
-    const item = mk('div', 'search-item');
-    const title = mk('div', 'search-item-title', r.path);
-    const snippet = mk('div', 'search-item-snippet');
-    snippet.appendChild(highlightSnippet(r.snippet || '', r.positions || []));
-    item.append(title, snippet);
-    item.onclick = () => {
-      box.hidden = true;
-      $('#searchInput').value = '';
-      closeDrawer();
-      location.hash = '#view/' + encodeURIComponent(r.path);
-    };
-    box.appendChild(item);
-  });
-  box.hidden = false;
-}
-
-function highlightSnippet(snippet, positions) {
-  const frag = document.createDocumentFragment();
-  let last = 0;
-  (positions || []).forEach((p) => {
-    const s = p[0];
-    const e = p[1];
-    if (s < last || e > snippet.length) return; // 重叠/越界保护
-    frag.appendChild(document.createTextNode(snippet.slice(last, s)));
-    const mark = document.createElement('mark');
-    mark.textContent = snippet.slice(s, e);
-    frag.appendChild(mark);
-    last = e;
-  });
-  frag.appendChild(document.createTextNode(snippet.slice(last)));
-  return frag;
-}
-
-/* ================= 浏览器内编辑 ================= */
-let editorDirty = false;
-let editorPreviewTimer = null;
-
-function setEditorTab(showEdit) {
-  $('#editor').classList.toggle('show-preview', !showEdit);
-  $('#tabEdit').classList.toggle('active', showEdit);
-  $('#tabPreview').classList.toggle('active', !showEdit);
-}
-
-async function enterEditor() {
-  if (!state.view || isGuest()) return;
-  try {
-    const text = await apiText('/api/file?path=' + encodeURIComponent(state.view));
-    state.noteContent = text;
-    $('#editorTitle').textContent = state.view.split('/').pop();
-    const ta = $('#editorText');
-    ta.value = text;
-    editorDirty = false;
-    setEditorTab(true);
-    renderEditorPreview();
-    $('#previewWrap').hidden = true;
-    $('#editor').hidden = false;
-    document.body.classList.add('editing');
-    ta.focus();
-  } catch (e) {
-    toast(e.message);
-  }
-}
-
-function exitEditor() {
-  $('#editor').hidden = true;
-  $('#previewWrap').hidden = false;
-  document.body.classList.remove('editing');
-}
-
-async function saveEdit() {
-  if (!state.view) return;
-  try {
-    await api('/api/edit', {
-      method: 'PUT',
-      body: JSON.stringify({ path: state.view, content: $('#editorText').value }),
-    });
-    editorDirty = false;
-    toast('已保存');
-    exitEditor();
-    await refreshTree();
-    await openPreview(state.view);
-  } catch (e) {
-    toast(e.message);
-  }
-}
-
-async function cancelEdit() {
-  if (editorDirty) {
-    const ok = await confirmBox('放弃修改', '有未保存的修改，确定放弃吗？', '放弃');
-    if (!ok) return;
-  }
-  editorDirty = false;
-  exitEditor();
-}
-
-function scheduleEditorPreview() {
-  editorDirty = true;
-  clearTimeout(editorPreviewTimer);
-  editorPreviewTimer = setTimeout(renderEditorPreview, 250);
-}
-
-function renderEditorPreview() {
-  renderMarkdown($('#editorPreview'), $('#editorText').value, state.view);
-}
-
 /* ================= 用户管理 ================= */
 async function openUsers() {
   try {
@@ -1093,16 +781,6 @@ async function openUsers() {
   $('#usersModal').hidden = false;
 }
 
-const ROLE_LABELS = { admin: '管理员', user: '普通用户', guest: '游客' };
-
-function roleLabel(role) {
-  return ROLE_LABELS[role] || '管理员';
-}
-
-function roleChipCls(role) {
-  return 'role-chip' + (role === 'admin' ? '' : role === 'user' ? ' user' : ' guest');
-}
-
 function renderUsers(users) {
   const list = $('#usersList');
   list.innerHTML = '';
@@ -1110,35 +788,8 @@ function renderUsers(users) {
   users.forEach((u) => {
     const row = mk('div', 'user-item');
     const name = mk('span', 'user-item-name', u.username + (u.username === me ? '（我）' : ''));
-    row.appendChild(name);
-    if (u.username === me) {
-      // 不能修改自己的角色，只显示徽标（防止误操作把自己降级）
-      row.appendChild(mk('span', roleChipCls(u.role), roleLabel(u.role)));
-    } else {
-      const sel = mk('select', 'role-select role-select-sm');
-      ['admin', 'user', 'guest'].forEach((r) => {
-        const opt = mk('option', '', roleLabel(r));
-        opt.value = r;
-        if (u.role === r) opt.selected = true;
-        sel.appendChild(opt);
-      });
-      sel.onchange = async () => {
-        const target = sel.value;
-        try {
-          await api('/api/auth/users/' + encodeURIComponent(u.username) + '/role', {
-            method: 'PUT',
-            body: JSON.stringify({ role: target }),
-          });
-          toast(`已把 ${u.username} 的角色改为「${roleLabel(target)}」`);
-          const data = await api('/api/auth/users');
-          renderUsers(data.users || []);
-        } catch (e) {
-          toast(e.message);
-          sel.value = u.role;
-        }
-      };
-      row.appendChild(sel);
-    }
+    const chip = mk('span', 'role-chip' + (u.role === 'guest' ? ' guest' : ''), u.role === 'guest' ? '游客' : '管理员');
+    row.append(name, chip);
     if (u.role === 'guest' && u.username !== me) {
       const btnDel = mk('button', 'btn tiny danger', '删除');
       btnDel.onclick = async () => {
@@ -1163,7 +814,6 @@ function renderUsers(users) {
 async function createGuest() {
   const username = $('#nuUser').value.trim();
   const password = $('#nuPass').value;
-  const role = $('#nuRole').value || 'guest';
   if (!username || !password) {
     toast('请填写用户名和密码');
     return;
@@ -1171,11 +821,11 @@ async function createGuest() {
   try {
     await api('/api/auth/users', {
       method: 'POST',
-      body: JSON.stringify({ username, password, role }),
+      body: JSON.stringify({ username, password }),
     });
     $('#nuUser').value = '';
     $('#nuPass').value = '';
-    toast(`已创建账号 ${username}（${roleLabel(role)}）`);
+    toast(`已创建游客账号 ${username}`);
     const data = await api('/api/auth/users');
     renderUsers(data.users || []);
   } catch (e) {
@@ -1244,41 +894,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#btnDownloadNote').onclick = () => {
     if (state.view) window.location = '/api/file?path=' + encodeURIComponent(state.view) + '&download=1';
   };
-
-  // 搜索
-  bindSearch();
-
-  // 目录（TOC）
-  $('#btnToc').onclick = openTocDrawer;
-  $('#btnTocClose').onclick = closeTocDrawer;
-  $('#tocMask').onclick = closeTocDrawer;
-  $('#btnTocCollapse').onclick = () => {
-    const collapsed = document.body.classList.toggle('toc-collapsed');
-    $('#btnTocCollapse').textContent = collapsed ? '▸' : '▾';
-  };
-
-  // 编辑器
-  $('#btnEdit').onclick = enterEditor;
-  $('#btnEditorSave').onclick = saveEdit;
-  $('#btnEditorCancel').onclick = cancelEdit;
-  $('#editorText').addEventListener('input', scheduleEditorPreview);
-  $('#tabEdit').onclick = () => setEditorTab(true);
-  $('#tabPreview').onclick = () => setEditorTab(false);
-  // 编辑器实时预览中的站内链接不做跳转（避免编辑时丢失内容）
-  $('#editorPreview').addEventListener('click', (e) => {
-    const a = e.target.closest('a');
-    if (a && a.getAttribute('href') && a.getAttribute('href').startsWith('#')) e.preventDefault();
-  });
-
-  // Ctrl+S / Cmd+S 保存
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-      if (document.body.classList.contains('editing')) {
-        e.preventDefault();
-        saveEdit();
-      }
-    }
-  });
 
   // 笔记内相对链接跳转（.md → 站内打开另一篇笔记）
   $('#noteBody').addEventListener('click', (e) => {

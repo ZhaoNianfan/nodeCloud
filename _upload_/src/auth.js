@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const config = require('./config');
 const state = require('./state');
-const { normalizeRole } = require('./users');
 
 let _secret = null;
 
@@ -91,7 +90,7 @@ function requireAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ error: '账号不存在或已被删除' });
   }
-  req.user = { username: user.username, role: normalizeRole(user.role) };
+  req.user = { username: user.username, role: user.role === 'guest' ? 'guest' : 'admin' };
   next();
 }
 

@@ -3,14 +3,6 @@
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-/** 合法角色：admin=管理员，user=普通用户，guest=游客 */
-const ROLES = ['admin', 'user', 'guest'];
-
-/** 规范化角色：兼容旧数据（无 role 字段的一律视为管理员） */
-function normalizeRole(role) {
-  return ROLES.includes(role) ? role : 'admin';
-}
-
 /**
  * 用户存储：单文件 JSON，原子写入，权限 600。
  * 个人笔记应用规模足够，无需数据库。
@@ -26,7 +18,7 @@ class UserStore {
       const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       const list = Array.isArray(data) ? data : [];
       // 兼容旧数据：无 role 字段的一律视为管理员（正式账号）
-      return list.map((u) => ({ ...u, role: normalizeRole(u.role) }));
+      return list.map((u) => ({ ...u, role: u.role === 'guest' ? 'guest' : 'admin' }));
     } catch (e) {
       return [];
     }
@@ -58,7 +50,7 @@ class UserStore {
     return this.users.find((u) => u.username.toLowerCase() === key) || null;
   }
 
-  /** role: 'admin'（管理员）/ 'user'（普通用户）/ 'guest'（游客，仅可查看） */
+  /** role: 'admin'（正式账号）或 'guest'（游客，仅可查看） */
   async create(username, password, role) {
     if (this.find(username)) {
       const err = new Error('用户名已存在');
@@ -66,15 +58,14 @@ class UserStore {
       throw err;
     }
     const hash = await bcrypt.hash(password, 10);
-    const roleValue = normalizeRole(role);
     this.users.push({
       username,
       hash,
-      role: roleValue,
+      role: role === 'guest' ? 'guest' : 'admin',
       createdAt: new Date().toISOString(),
     });
     this._save();
-    return { username, role: roleValue };
+    return { username, role };
   }
 
   /** 删除用户（游客）；返回被删除的用户信息，不存在则抛 404 */
@@ -103,24 +94,6 @@ class UserStore {
     return { username };
   }
 
-  /** 修改用户角色（仅管理员可调用） */
-  setRole(username, role) {
-    const user = this.find(username);
-    if (!user) {
-      const err = new Error('用户不存在');
-      err.status = 404;
-      throw err;
-    }
-    if (!ROLES.includes(role)) {
-      const err = new Error('非法角色');
-      err.status = 400;
-      throw err;
-    }
-    user.role = role;
-    this._save();
-    return { username: user.username, role: user.role };
-  }
-
   async verify(username, password) {
     const user = this.find(username);
     if (!user) return false;
@@ -128,4 +101,4 @@ class UserStore {
   }
 }
 
-module.exports = { UserStore, normalizeRole, ROLES };
+module.exports = { UserStore };

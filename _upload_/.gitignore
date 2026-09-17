@@ -1,0 +1,11 @@
+node_modules/
+data/
+notes/
+.npm-cache/
+*.log
+.DS_Store
+Thumbs.db
+test/cookies.txt
+test/dl.zip
+test/zipcheck/
+test/body-*.json

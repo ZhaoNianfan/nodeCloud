@@ -4,5 +4,4 @@
 module.exports = {
   users: null, // UserStore 实例
   secret: null, // HMAC 签名密钥
-  uploads: null, // UploadStore 实例（文件归属）
 };

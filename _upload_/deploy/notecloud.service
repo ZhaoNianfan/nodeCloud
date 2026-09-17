@@ -1,0 +1,23 @@
+[Unit]
+Description=NoteCloud Markdown Notes Server
+After=network.target
+
+[Service]
+Type=simple
+User=notecloud
+Group=notecloud
+WorkingDirectory=/opt/notecloud
+ExecStart=/usr/bin/node /opt/notecloud/server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# 如需自定义路径，取消注释并按需修改：
+# Environment=NOTE_ROOT=/data/notes
+# Environment=NOTE_DATA=/data/notecloud-data
+# Environment=MAX_UPLOAD_MB=1024
+# 加固：限制可打开文件数与进程
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
