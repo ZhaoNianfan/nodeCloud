@@ -136,7 +136,7 @@ async function api(path, opts = {}) {
 }
 
 async function apiText(path) {
-  const res = await fetch(path, { credentials: 'same-origin' });
+  const res = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
   if (res.status === 401) {
     showLogin();
     throw new Error('未登录');

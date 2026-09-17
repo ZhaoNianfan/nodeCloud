@@ -907,7 +907,7 @@ body.toc-collapsed .toc-title { display: none; }
   display: none;
   position: fixed;
   right: 14px;
-  bottom: 20px;
+  bottom: 60px;
   z-index: 70;
   border-radius: 20px;
   padding: 9px 16px;
@@ -1163,8 +1163,9 @@ body.editing .editor {
 @media (max-width: 899px) {
   .toc { display: none; }
 
-  body.previewing .toc-btn { display: inline-flex; }
-  body.previewing.editing .toc-btn { display: none; }
+  /* TOC按钮：移动端预览时始终显示，编辑时隐藏 */
+  .toc-btn { display: inline-flex !important; }
+  body.previewing.editing .toc-btn { display: none !important; }
 
   body.previewing .preview-wrap { min-height: 100%; }
 
