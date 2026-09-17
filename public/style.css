@@ -912,6 +912,14 @@ body.toc-collapsed .toc-title { display: none; }
   border-radius: 20px;
   padding: 9px 16px;
   box-shadow: var(--shadow);
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+/* 下滑收起时，TOC 按钮跟着隐藏 */
+body.bar-hidden .toc-btn {
+  transform: translateY(calc(100% + 30px));
+  opacity: 0;
+  pointer-events: none;
 }
 
 .toc-mask {
