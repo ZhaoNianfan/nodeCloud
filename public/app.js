@@ -211,21 +211,6 @@ function promptBox(title, placeholder = '', value = '') {
 const isGuest = () => state.user && state.user.role === 'guest';
 const isAdmin = () => state.user && state.user.role === 'admin';
 
-// 前端判断用户是否对 rel 路径有操作权限（与后端 canOperate 逻辑一致）
-function canOperateClient(rel) {
-  if (!state.user) return false;
-  if (state.user.role === 'admin') return true;
-  if (state.user.role === 'guest') return false;
-  // 根目录下的内容，所有人都能操作
-  if (!rel || !rel.includes('/')) return true;
-  // 子目录：检查父目录是否归当前用户所有
-  const parentDir = rel.substring(0, rel.lastIndexOf('/'));
-  if (!parentDir) return true;
-  // 遍历目录树查找父目录的 owner
-  const node = findNode(parentDir);
-  return node && node.owner === state.user.username;
-}
-
 function showLogin() {
   $('#app').hidden = true;
   $('#login').hidden = false;
