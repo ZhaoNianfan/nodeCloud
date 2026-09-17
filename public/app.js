@@ -390,8 +390,12 @@ function renderBreadcrumb() {
     acc = acc ? acc + '/' + s : s;
     const sep = mk('span', 'crumb-sep', '/');
     const c = mk('span', 'crumb', s);
-    if (i < segs.length - 1) c.onclick = () => go('#dir/' + encodeURIComponent(acc));
-    else c.classList.add('current');
+    if (i < segs.length - 1) {
+      const target = acc; // 捕获当前值，避免闭包引用最终值
+      c.onclick = () => go('#dir/' + encodeURIComponent(target));
+    } else {
+      c.classList.add('current');
+    }
     el.append(sep, c);
   });
 }
