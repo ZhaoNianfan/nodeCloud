@@ -1,8 +1,0 @@
-# 统一行尾：仓库内保存 LF；Windows 检出为 CRLF 也不影响服务器部署
-* text=auto
-
-# 部署到 Linux 的关键文件强制 LF，避免 CRLF 破坏脚本执行
-*.sh text eol=lf
-deploy/notecloud.service text eol=lf
-deploy/Caddyfile text eol=lf
-*.md text eol=lf
