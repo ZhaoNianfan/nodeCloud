@@ -686,7 +686,10 @@ function setupToc() {
     tocObserver = null;
   }
   $('#toc').hidden = headings.length === 0;
-  if (!headings.length) return;
+  if (!headings.length) {
+    drawerList.appendChild(mk('div', 'toc-empty', '此笔记没有目录标题'));
+    return;
+  }
 
   // 给每个标题分配唯一 id，用于锚点跳转与滚动高亮
   const used = new Set();
