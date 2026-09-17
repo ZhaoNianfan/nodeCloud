@@ -47,7 +47,13 @@ async function buildTree(absDir, relDir) {
     const abs = path.join(absDir, e.name);
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     if (e.isDirectory()) {
-      dirs.push(await buildTree(abs, rel));
+      const dirNode = await buildTree(abs, rel);
+      // 附加归属信息
+      if (state.uploads) {
+        const rec = state.uploads.get(rel);
+        if (rec) dirNode.owner = rec.uploader;
+      }
+      dirs.push(dirNode);
     } else if (e.isFile()) {
       let size = 0;
       let mtime = 0;
@@ -244,12 +250,16 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
 router.post('/dir', auth.requireAuth, async (req, res, next) => {
   try {
     const p = (req.body && req.body.path) || '';
-    const { full } = resolveInside(config.notesRoot, p);
+    const { full, rel: cleanRel } = resolveInside(config.notesRoot, p);
     if (full === path.resolve(config.notesRoot)) {
       return res.status(400).json({ error: '不能创建根目录' });
     }
     fs.mkdirSync(full, { recursive: true });
     assertRealInside(config.notesRoot, full);
+    // 记录文件夹归属
+    if (state.uploads && cleanRel) {
+      state.uploads.record(cleanRel, req.user.username);
+    }
     res.json({ ok: true });
   } catch (e) {
     next(e);
