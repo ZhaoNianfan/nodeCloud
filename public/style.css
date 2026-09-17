@@ -934,7 +934,7 @@ body.bar-hidden .toc-btn {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(30vh + 10px);
+  bottom: 0;
   min-height: 180px;
   max-height: 50vh;
   background: var(--panel);
