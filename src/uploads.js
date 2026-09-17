@@ -58,6 +58,27 @@ class UploadStore {
   size() {
     return Object.keys(this.map).length;
   }
+
+  /** 删除单个文件的归属记录 */
+  remove(rel) {
+    if (this.map[rel]) {
+      delete this.map[rel];
+      this._save();
+    }
+  }
+
+  /** 删除文件夹下所有归属记录 */
+  removeDir(dirRel) {
+    const prefix = dirRel ? dirRel + '/' : '';
+    let changed = false;
+    for (const key of Object.keys(this.map)) {
+      if (key === dirRel || key.startsWith(prefix)) {
+        delete this.map[key];
+        changed = true;
+      }
+    }
+    if (changed) this._save();
+  }
 }
 
 const MD_RE = /\.(md|markdown)$/i;

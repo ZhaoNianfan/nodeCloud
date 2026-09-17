@@ -257,10 +257,10 @@ router.post('/dir', adminOnly, async (req, res, next) => {
 });
 
 // ---------- 读取文件（在线预览 / 图片 / 下载） ----------
-// 游客可在线查看（内联读取），但 download=1 需管理员权限
+// 游客可在线查看（内联读取），但 download=1 需非游客权限
 router.get('/file', (req, res, next) => {
   try {
-    if (req.query.download === '1' && req.user.role !== 'admin') {
+    if (req.query.download === '1' && req.user.role === 'guest') {
       return res.status(403).json({ error: '游客账号仅可在线查看，不能下载文件' });
     }
     const { full } = resolveInside(config.notesRoot, req.query.path);
@@ -372,7 +372,16 @@ router.delete('/file', auth.requireAuth, async (req, res, next) => {
         return res.status(403).json({ error: '只能删除自己上传的文件' });
       }
     }
+    // 先判断类型，再删除，最后清理归属记录
+    const isDir = fs.existsSync(full) && fs.statSync(full).isDirectory();
     await fsp.rm(full, { recursive: true, force: true });
+    if (state.uploads) {
+      if (isDir) {
+        state.uploads.removeDir(cleanRel);
+      } else {
+        state.uploads.remove(cleanRel);
+      }
+    }
     res.json({ ok: true });
   } catch (e) {
     next(e);
