@@ -13,32 +13,33 @@ const state = require('../state');
 const { resolveInside, assertRealInside, sanitizeName, normalizeRel } = require('../paths');
 
 const router = express.Router();
-
 const canWrite = auth.requireRole('admin', 'user');
 
 // ========== 工具函数 ==========
 
-/**
- * 判断用户是否对 rel 路径拥有操作权限。
- * 规则：根目录是公共的；子目录只有 owner 或 admin 可操作。
- * @param {string} userRole - 用户角色
- * @param {string} username - 用户名
- * @param {string} rel - 相对路径（文件或文件夹）
- * @returns {boolean}
- */
-function canOperate(userRole, username, rel) {
+/** 递归收集目录下所有文件的相对路径 */
+function collectFiles(dirAbs, dirRel) {
+  const out = [];
+  let entries;
+  try { entries = fs.readdirSync(dirAbs, { withFileTypes: true }); } catch (e) { return out; }
+  for (const e of entries) {
+    const abs = path.join(dirAbs, e.name);
+    const rel = dirRel ? dirRel + '/' + e.name : e.name;
+    if (e.isDirectory()) out.push(...collectFiles(abs, rel));
+    else if (e.isFile()) out.push(rel);
+  }
+  return out;
+}
+
+/** 检查用户是否拥有该文件（owner 或 admin） */
+function isFileOwner(userRole, username, fileRel) {
   if (userRole === 'admin') return true;
   if (userRole === 'guest') return false;
-  // 根目录下的内容，所有人都能操作（公共区域）
-  if (!rel || !rel.includes('/')) return true;
-  // 子目录：检查该文件/文件夹所在的父目录是否归当前用户所有
-  const parentDir = rel.substring(0, rel.lastIndexOf('/'));
-  if (!parentDir) return true; // 根目录下
-  const rec = state.uploads ? state.uploads.get(parentDir) : null;
+  const rec = state.uploads ? state.uploads.get(fileRel) : null;
   return rec && rec.uploader === username;
 }
 
-// 上传相关
+// 上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     fs.mkdirSync(config.tmpDir, { recursive: true });
@@ -49,58 +50,31 @@ const storage = multer.diskStorage({
     cb(null, `up-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`);
   },
 });
-
-const upload = multer({
-  storage,
-  limits: { fileSize: config.maxUploadMb * 1024 * 1024, files: 500 },
-});
-
+const upload = multer({ storage, limits: { fileSize: config.maxUploadMb * 1024 * 1024, files: 500 } });
 const MD_RE = /\.(md|markdown)$/i;
 
 // ========== 目录树 ==========
 async function buildTree(absDir, relDir) {
   const entries = await fsp.readdir(absDir, { withFileTypes: true });
-  const dirs = [];
-  const files = [];
+  const dirs = [], files = [];
   for (const e of entries) {
     const abs = path.join(absDir, e.name);
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     if (e.isDirectory()) {
-      const dirNode = await buildTree(abs, rel);
-      if (state.uploads) {
-        const rec = state.uploads.get(rel);
-        if (rec) dirNode.owner = rec.uploader;
-      }
-      dirs.push(dirNode);
+      dirs.push(await buildTree(abs, rel));
     } else if (e.isFile()) {
-      let size = 0;
-      let mtime = 0;
-      try {
-        const st = await fsp.stat(abs);
-        size = st.size;
-        mtime = st.mtimeMs;
-      } catch (err) {}
+      let size = 0, mtime = 0;
+      try { const st = await fsp.stat(abs); size = st.size; mtime = st.mtimeMs; } catch (err) {}
       files.push({ name: e.name, type: 'file', rel, size, mtime, isMd: MD_RE.test(e.name) });
     }
   }
   const cmp = (a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN');
-  dirs.sort(cmp);
-  files.sort(cmp);
-  return {
-    name: relDir ? path.basename(absDir) : '',
-    type: 'dir',
-    rel: relDir || '',
-    children: [...dirs, ...files],
-  };
+  dirs.sort(cmp); files.sort(cmp);
+  return { name: relDir ? path.basename(absDir) : '', type: 'dir', rel: relDir || '', children: [...dirs, ...files] };
 }
 
 router.get('/tree', async (req, res, next) => {
-  try {
-    const tree = await buildTree(config.notesRoot, '');
-    res.json(tree);
-  } catch (e) {
-    next(e);
-  }
+  try { res.json(await buildTree(config.notesRoot, '')); } catch (e) { next(e); }
 });
 
 // ========== 全文搜索 ==========
@@ -125,13 +99,10 @@ function makeSnippet(text, needle, lowerText) {
   const first = lowerText.indexOf(needle);
   const start = Math.max(0, first - 50);
   const end = Math.min(text.length, first + needle.length + 50);
-  const prefix = start > 0 ? '…' : '';
-  const suffix = end < text.length ? '…' : '';
-  const snippet = prefix + text.slice(start, end) + suffix;
-  const snipLower = snippet.toLowerCase();
+  const snippet = (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
   const positions = [];
-  let pos = snipLower.indexOf(needle);
-  while (pos !== -1) { positions.push([pos, pos + needle.length]); pos = snipLower.indexOf(needle, pos + needle.length); }
+  let pos = snippet.toLowerCase().indexOf(needle);
+  while (pos !== -1) { positions.push([pos, pos + needle.length]); pos = snippet.toLowerCase().indexOf(needle, pos + needle.length); }
   return { snippet, positions };
 }
 
@@ -144,8 +115,7 @@ router.get('/search', async (req, res, next) => {
     const results = [];
     for (const rel of files) {
       const full = path.join(config.notesRoot, ...rel.split('/'));
-      let text;
-      try { text = await fsp.readFile(full, 'utf8'); } catch (e) { continue; }
+      let text; try { text = await fsp.readFile(full, 'utf8'); } catch (e) { continue; }
       const lower = text.toLowerCase();
       let count = 0; let idx = lower.indexOf(needle);
       while (idx !== -1) { count++; idx = lower.indexOf(needle, idx + needle.length); }
@@ -164,7 +134,7 @@ router.get('/ownership', (req, res) => {
   if (!rel) return res.json({ canEdit: false });
   if (req.user.role === 'admin') return res.json({ canEdit: true });
   if (req.user.role === 'guest') return res.json({ canEdit: false });
-  res.json({ canEdit: canOperate(req.user.role, req.user.username, rel) });
+  res.json({ canEdit: isFileOwner(req.user.role, req.user.username, rel) });
 });
 
 // ========== 上传 ==========
@@ -184,36 +154,26 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
       fs.mkdirSync(parent, { recursive: true });
       assertRealInside(config.notesRoot, parent);
 
-      // 权限校验：普通用户只能在自己拥有或根目录下上传
-      if (!canOperate(req.user.role, req.user.username, cleanRel)) {
-        fsp.unlink(f.path).catch(() => {});
-        return res.status(403).json({ error: '只能在自己创建的文件夹或根目录下上传' });
-      }
-
       const existedBefore = fs.existsSync(full);
       let finalRel = cleanRel;
 
       if (existedBefore && !overwrite) {
         const ext = path.extname(full);
         const base = path.basename(full, ext);
-        let n = 1;
-        let candidate;
+        let n = 1, candidate;
         do { candidate = path.join(parent, `${base} (${n})${ext}`); n++; } while (fs.existsSync(candidate));
         await fsp.rename(f.path, candidate);
         finalRel = path.relative(config.notesRoot, candidate).split(path.sep).join('/');
+        if (state.uploads) state.uploads.record(finalRel, req.user.username);
         results.push({ rel: finalRel, size: f.size, conflict: true, renamed: true });
         continue;
       }
 
       if (existedBefore) await fsp.rm(full, { force: true });
-      try {
-        await fsp.rename(f.path, full);
-      } catch (e) {
-        if (e.code === 'EXDEV') {
-          await fsp.copyFile(f.path, full);
-          await fsp.unlink(f.path).catch(() => {});
-        } else { throw e; }
+      try { await fsp.rename(f.path, full); } catch (e) {
+        if (e.code === 'EXDEV') { await fsp.copyFile(f.path, full); await fsp.unlink(f.path).catch(() => {}); } else { throw e; }
       }
+      if (state.uploads) state.uploads.record(finalRel, req.user.username);
       results.push({ rel: finalRel, size: f.size, conflict: existedBefore, renamed: false });
     }
     res.json({ ok: true, files: results });
@@ -227,35 +187,20 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
 router.post('/dir', auth.requireAuth, async (req, res, next) => {
   try {
     const p = (req.body && req.body.path) || '';
-    const { full, rel: cleanRel } = resolveInside(config.notesRoot, p);
-    if (full === path.resolve(config.notesRoot)) {
-      return res.status(400).json({ error: '不能创建根目录' });
-    }
-    // 权限校验：普通用户只能在自己拥有或根目录下新建
-    if (!canOperate(req.user.role, req.user.username, cleanRel)) {
-      return res.status(403).json({ error: '只能在自己创建的文件夹或根目录下新建' });
-    }
+    const { full } = resolveInside(config.notesRoot, p);
+    if (full === path.resolve(config.notesRoot)) return res.status(400).json({ error: '不能创建根目录' });
     fs.mkdirSync(full, { recursive: true });
     assertRealInside(config.notesRoot, full);
-    // 记录文件夹归属
-    if (state.uploads && cleanRel) {
-      state.uploads.record(cleanRel, req.user.username);
-    }
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
-// ========== 读取文件（在线预览 / 图片 / 下载） ==========
+// ========== 读取文件 ==========
 router.get('/file', (req, res, next) => {
   try {
-    if (req.query.download === '1' && req.user.role === 'guest') {
-      return res.status(403).json({ error: '游客账号仅可在线查看，不能下载文件' });
-    }
     const { full } = resolveInside(config.notesRoot, req.query.path);
     assertRealInside(config.notesRoot, full);
-    if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
-      return res.status(404).json({ error: '文件不存在' });
-    }
+    if (!fs.existsSync(full) || !fs.statSync(full).isFile()) return res.status(404).json({ error: '文件不存在' });
     if (req.query.download === '1') {
       res.download(full, path.basename(full), (err) => { if (err && !res.headersSent) next(err); });
     } else {
@@ -275,12 +220,13 @@ router.put('/edit', async (req, res, next) => {
     if (!MD_RE.test(cleanRel)) return res.status(400).json({ error: '只能编辑 Markdown 文件' });
     if (!fs.existsSync(full) || !fs.statSync(full).isFile()) return res.status(404).json({ error: '文件不存在' });
     assertRealInside(config.notesRoot, full);
-    if (!canOperate(req.user.role, req.user.username, cleanRel)) {
-      return res.status(403).json({ error: '只能编辑自己文件夹内的笔记' });
+    if (!isFileOwner(req.user.role, req.user.username, cleanRel)) {
+      return res.status(403).json({ error: '只能编辑自己上传的笔记' });
     }
     const tmp = full + '.edit-' + Date.now();
     await fsp.writeFile(tmp, content, 'utf8');
     await fsp.rename(tmp, full);
+    if (state.uploads) state.uploads.touch(cleanRel);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -299,8 +245,7 @@ router.get('/zip', auth.requireAuth, (req, res, next) => {
     archive.on('error', (err) => { res.destroy(err); });
     res.on('close', () => archive.abort());
     archive.pipe(res);
-    if (isDir) archive.directory(full, baseName);
-    else archive.file(full, { name: path.basename(full) });
+    if (isDir) archive.directory(full, baseName); else archive.file(full, { name: path.basename(full) });
     archive.finalize();
   } catch (e) { next(e); }
 });
@@ -312,15 +257,31 @@ router.delete('/file', auth.requireAuth, async (req, res, next) => {
     if (full === path.resolve(config.notesRoot)) return res.status(400).json({ error: '不能删除根目录' });
     assertRealInside(config.notesRoot, full);
     if (req.user.role === 'guest') return res.status(403).json({ error: '游客仅可在线查看' });
-    if (!canOperate(req.user.role, req.user.username, cleanRel)) {
-      return res.status(403).json({ error: '只能删除自己文件夹内的内容' });
-    }
+
     const isDir = fs.existsSync(full) && fs.statSync(full).isDirectory();
-    await fsp.rm(full, { recursive: true, force: true });
-    // 清理归属记录
-    if (state.uploads && isDir) {
-      state.uploads.removeDir(cleanRel);
+
+    if (isDir) {
+      // 文件夹删除：递归检查所有文件归属，必须全部属于当前用户
+      const childFiles = collectFiles(full, cleanRel);
+      for (const fileRel of childFiles) {
+        if (!isFileOwner(req.user.role, req.user.username, fileRel)) {
+          return res.status(403).json({ error: '该文件夹包含其他用户的文件，无法删除' });
+        }
+      }
+      await fsp.rm(full, { recursive: true, force: true });
+      // 清理所有子文件的归属记录
+      if (state.uploads) {
+        for (const fileRel of childFiles) state.uploads.remove(fileRel);
+      }
+    } else {
+      // 文件删除：检查归属
+      if (!isFileOwner(req.user.role, req.user.username, cleanRel)) {
+        return res.status(403).json({ error: '只能删除自己上传的文件' });
+      }
+      await fsp.rm(full, { force: true });
+      if (state.uploads) state.uploads.remove(cleanRel);
     }
+
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

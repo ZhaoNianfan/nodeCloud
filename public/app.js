@@ -456,23 +456,21 @@ function dirRow(n) {
   row.append(name, meta, actions);
   row.classList.add('clickable');
   row.onclick = () => go('#dir/' + encodeURIComponent(n.rel));
+  // 所有非游客都可以下载 ZIP
+  const btnZip = mk('button', 'btn tiny', 'ZIP');
+  btnZip.onclick = (e) => {
+    e.stopPropagation();
+    downloadZip(n.rel);
+  };
+  actions.appendChild(btnZip);
+  // 删除按钮：游客不显示，非游客都显示（后端递归校验文件归属）
   if (!isGuest()) {
-    // 所有非游客都可以下载 ZIP
-    const btnZip = mk('button', 'btn tiny', 'ZIP');
-    btnZip.onclick = (e) => {
+    const btnDel = mk('button', 'btn tiny danger', '删除');
+    btnDel.onclick = (e) => {
       e.stopPropagation();
-      downloadZip(n.rel);
+      delNode(n);
     };
-    actions.appendChild(btnZip);
-    // 删除：管理员可删任何，普通用户根据父目录归属判断
-    if (isAdmin() || canOperateClient(n.rel)) {
-      const btnDel = mk('button', 'btn tiny danger', '删除');
-      btnDel.onclick = (e) => {
-        e.stopPropagation();
-        delNode(n);
-      };
-      actions.appendChild(btnDel);
-    }
+    actions.appendChild(btnDel);
   }
   return row;
 }
@@ -504,23 +502,21 @@ function fileRow(n) {
     actions.appendChild(btnView);
     row.onclick = () => window.open('/api/file?path=' + encodeURIComponent(n.rel), '_blank');
   }
-  // 所有非游客用户都可以下载
+  // 所有非游客用户都可以下载；游客也可以下载
+  const btnDl = mk('button', 'btn tiny', '下载');
+  btnDl.onclick = (e) => {
+    e.stopPropagation();
+    window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
+  };
+  actions.appendChild(btnDl);
+  // 删除按钮：游客不显示，非游客都显示（后端校验文件归属）
   if (!isGuest()) {
-    const btnDl = mk('button', 'btn tiny', '下载');
-    btnDl.onclick = (e) => {
+    const btnDel = mk('button', 'btn tiny danger', '删除');
+    btnDel.onclick = (e) => {
       e.stopPropagation();
-      window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
+      delNode(n);
     };
-    actions.appendChild(btnDl);
-    // 删除按钮：基于父目录归属判断（根目录下的文件所有人都能删）
-    if (isAdmin() || canOperateClient(n.rel)) {
-      const btnDel = mk('button', 'btn tiny danger', '删除');
-      btnDel.onclick = (e) => {
-        e.stopPropagation();
-        delNode(n);
-      };
-      actions.appendChild(btnDel);
-    }
+    actions.appendChild(btnDel);
   }
   return row;
 }
