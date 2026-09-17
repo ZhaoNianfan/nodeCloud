@@ -211,6 +211,21 @@ function promptBox(title, placeholder = '', value = '') {
 const isGuest = () => state.user && state.user.role === 'guest';
 const isAdmin = () => state.user && state.user.role === 'admin';
 
+// 前端判断用户是否对 rel 路径有操作权限（与后端 canOperate 逻辑一致）
+function canOperateClient(rel) {
+  if (!state.user) return false;
+  if (state.user.role === 'admin') return true;
+  if (state.user.role === 'guest') return false;
+  // 根目录下的内容，所有人都能操作
+  if (!rel || !rel.includes('/')) return true;
+  // 子目录：检查父目录是否归当前用户所有
+  const parentDir = rel.substring(0, rel.lastIndexOf('/'));
+  if (!parentDir) return true;
+  // 遍历目录树查找父目录的 owner
+  const node = findNode(parentDir);
+  return node && node.owner === state.user.username;
+}
+
 function showLogin() {
   $('#app').hidden = true;
   $('#login').hidden = false;
@@ -449,8 +464,8 @@ function dirRow(n) {
       downloadZip(n.rel);
     };
     actions.appendChild(btnZip);
-    // 删除：管理员可删任何，普通用户只能删自己上传的文件夹
-    if (isAdmin() || n.owner === state.user.username) {
+    // 删除：管理员可删任何，普通用户根据父目录归属判断
+    if (isAdmin() || canOperateClient(n.rel)) {
       const btnDel = mk('button', 'btn tiny danger', '删除');
       btnDel.onclick = (e) => {
         e.stopPropagation();
@@ -497,8 +512,8 @@ function fileRow(n) {
       window.location = '/api/file?path=' + encodeURIComponent(n.rel) + '&download=1';
     };
     actions.appendChild(btnDl);
-    // 删除按钮：管理员可删任何文件，普通用户只能删自己的
-    if (isAdmin() || n.owner === state.user.username) {
+    // 删除按钮：基于父目录归属判断（根目录下的文件所有人都能删）
+    if (isAdmin() || canOperateClient(n.rel)) {
       const btnDel = mk('button', 'btn tiny danger', '删除');
       btnDel.onclick = (e) => {
         e.stopPropagation();
