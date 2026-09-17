@@ -242,18 +242,18 @@ async function submitAuth(e) {
   }
 }
 
-// 按角色调整界面：游客仅可查看；普通用户可上传/编辑/下载；管理员拥有全部权限
+// 按角色调整界面：游客仅可查看；普通用户可上传/编辑/下载/新建文件夹；管理员拥有全部权限
 function applyRoleUI() {
   const guest = isGuest();
   const admin = isAdmin();
-  // 管理员专属操作
-  const adminOnly = ['btnNewDir', 'btnZip', 'btnUsers'];
+  // 管理员专属操作（用户管理）
+  const adminOnly = ['btnUsers'];
   adminOnly.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest || !admin;
   });
-  // 管理员 + 普通用户可操作（上传/下载笔记）
-  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnDownloadNote'];
+  // 管理员 + 普通用户可操作（上传/下载/新建文件夹/下载ZIP）
+  const writeOnly = ['btnUpload', 'btnUploadDir', 'optRow', 'btnDownloadNote', 'btnNewDir', 'btnZip'];
   writeOnly.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = guest;
@@ -441,18 +441,23 @@ function dirRow(n) {
   row.append(name, meta, actions);
   row.classList.add('clickable');
   row.onclick = () => go('#dir/' + encodeURIComponent(n.rel));
-  if (isAdmin()) {
+  if (!isGuest()) {
+    // 所有非游客都可以下载 ZIP
     const btnZip = mk('button', 'btn tiny', 'ZIP');
-    const btnDel = mk('button', 'btn tiny danger', '删除');
     btnZip.onclick = (e) => {
       e.stopPropagation();
       downloadZip(n.rel);
     };
-    btnDel.onclick = (e) => {
-      e.stopPropagation();
-      delNode(n);
-    };
-    actions.append(btnZip, btnDel);
+    actions.appendChild(btnZip);
+    // 删除：管理员可删任何，普通用户只能删自己上传的文件夹
+    if (isAdmin() || n.owner === state.user.username) {
+      const btnDel = mk('button', 'btn tiny danger', '删除');
+      btnDel.onclick = (e) => {
+        e.stopPropagation();
+        delNode(n);
+      };
+      actions.appendChild(btnDel);
+    }
   }
   return row;
 }

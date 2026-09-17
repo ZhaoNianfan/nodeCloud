@@ -241,7 +241,7 @@ router.post('/upload', canWrite, upload.array('file', 500), async (req, res, nex
 });
 
 // ---------- 新建文件夹 ----------
-router.post('/dir', adminOnly, async (req, res, next) => {
+router.post('/dir', auth.requireAuth, async (req, res, next) => {
   try {
     const p = (req.body && req.body.path) || '';
     const { full } = resolveInside(config.notesRoot, p);
@@ -323,7 +323,7 @@ router.put('/edit', async (req, res, next) => {
 });
 
 // ---------- 打包下载（文件夹 ZIP / 单文件） ----------
-router.get('/zip', adminOnly, (req, res, next) => {
+router.get('/zip', auth.requireAuth, (req, res, next) => {
   try {
     const { full } = resolveInside(config.notesRoot, req.query.path);
     assertRealInside(config.notesRoot, full);
