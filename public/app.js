@@ -785,13 +785,15 @@ function openTocDrawer() {
   const drawer = $('#tocDrawer');
   const list = $('#tocDrawerList');
   const items = list.querySelectorAll('.toc-item');
-  // 根据标题数量动态计算高度：每项约32px + 头部约40px
+  // 根据标题数量动态计算高度，但不低于180px
   const itemHeight = 32;
   const headHeight = 40;
-  const maxItems = 10; // 最多显示10项的高度
+  const maxItems = 10;
   const count = Math.min(items.length, maxItems);
-  const h = headHeight + count * itemHeight + 16; // 16px padding
-  drawer.style.maxHeight = Math.min(h, window.innerHeight * 0.5) + 'px';
+  const h = headHeight + count * itemHeight + 16;
+  const minH = 180;
+  const maxH = Math.floor(window.innerHeight * 0.5);
+  drawer.style.maxHeight = Math.max(minH, Math.min(h, maxH)) + 'px';
   drawer.hidden = false;
   $('#tocMask').hidden = false;
 }
